@@ -1,17 +1,17 @@
 import { Plugin, TFile, TFolder, Notice, Editor, Menu, MarkdownView, MarkdownFileInfo } from "obsidian";
 import { Document, Packer } from "docx";
 import * as fs from "fs";
-import * as path from "path";
 
 import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, WRONG_NOTES_CACHE_TTL_MS } from "./constants";
 import type { HistoryEntry, WrongAnswerNote, PluginSettings } from "./types";
-import { parseFM, buildFM, knowledgeTags } from "./utils/frontmatter";
+import { parseFM, buildFM } from "./utils/frontmatter";
 import { isAbs, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, ensureFolder } from "./utils/fs-utils";
 import { safeName } from "./utils/text";
-import { todayStr, isDueForReview } from "./utils/review";
+import { isDueForReview } from "./utils/review";
 import { stripAnswerSummarySection } from "./utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "./utils/exporter";
 import { getElectronRemote } from "./utils/electron";
+import { KnowledgeService } from "./services/knowledgeService";
 import { MainSidebarView } from "./views/sidebarView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
 
@@ -20,6 +20,7 @@ import { QuestionGeneratorSettingTab } from "./views/settingTab";
 export default class QuestionGeneratorPlugin extends Plugin {
 	settings!: PluginSettings;
 	history: HistoryEntry[] = [];
+	knowledgeService = new KnowledgeService(this);
 
 	async loadSettings() {
 		const data = await this.loadData() as { history?: HistoryEntry[]; wrongAnswers?: { timestamp?: number; fileName?: string; note?: string; resultText?: string }[] } | null;
@@ -81,46 +82,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	emitDataChanged() { this.invalidateCache(); for (const cb of this._refreshCallbacks) { try { cb(); } catch { /* empty */ } } }
 
 	async updateKnowledgePointMOC(tags: string[], noteFileName: string) {
-		const kp = knowledgeTags(tags);
-		if (kp.length === 0) return;
-		const mocFolder = this.rootPath(this.settings.wrongKnowledgeFolder);
-		await ensureFolder(this.app, mocFolder);
-		for (const tag of kp) {
-			const mocPath = mocFolder + "/" + safeName(tag) + ".md";
-			const link = "[[" + noteFileName.replace(/\.md$/, "") + "]]";
-			let existing = "";
-			let existingLinks: string[] = [];
-			try {
-				if (isAbs(mocFolder)) {
-					existing = readFileStr(mocPath);
-				} else {
-					const f = this.app.vault.getAbstractFileByPath(mocPath);
-					if (f instanceof TFile) existing = await this.app.vault.read(f);
-				}
-				const { meta, body } = parseFM(existing);
-				existingLinks = Array.isArray(meta.relatedLinks) ? meta.relatedLinks : [];
-				const linkPattern = /\[\[([^\]]+)\]\]/g;
-				let m;
-				while ((m = linkPattern.exec(body)) !== null) { if (!existingLinks.includes(m[1]!)) existingLinks.push(m[1]!); }
-			} catch { /* empty */ }
-			if (!existingLinks.includes(link.replace(/\[\[|\]\]/g, ""))) existingLinks.push(link.replace(/\[\[|\]\]/g, ""));
-			const fm = buildFM({ tags: ["知识点", tag], relatedLinks: existingLinks, date: todayStr() });
-			let body = "# " + tag + "\n\n";
-			body += "> 知识点索引（MOC），由智学助手自动维护\n\n";
-			body += "## 相关错题\n\n";
-			for (const l of existingLinks) {
-				body += "- [[" + l.replace(/\[\[|\]\]/g, "") + "]]\n";
-			}
-			try {
-				if (isAbs(mocFolder)) {
-					writeFileStr(mocPath, fm + body);
-				} else {
-					const existingFile = this.app.vault.getAbstractFileByPath(mocPath);
-					if (existingFile instanceof TFile) await this.app.vault.modify(existingFile, fm + body);
-					else await this.app.vault.create(mocPath, fm + body);
-				}
-			} catch { /* empty */ }
-		}
+		return this.knowledgeService.updateKnowledgePointMOC(tags, noteFileName);
 	}
 
 	async loadAllWrongNotes(forceRefresh = false): Promise<WrongAnswerNote[]> {
@@ -200,129 +162,15 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	}
 
 	async loadExistingKnowledgeTags(): Promise<string[]> {
-		const folders = [this.rootPath(this.settings.questionKnowledgeFolder), this.rootPath(this.settings.noteKnowledgeFolder), this.rootPath(this.settings.wrongKnowledgeFolder)];
-		const tagSet = new Set<string>();
-		for (const folder of folders) {
-			if (!folder) continue;
-			if (isAbs(folder)) {
-				if (!fs.existsSync(folder)) continue;
-				for (const f of listMdFiles(folder)) {
-					tagSet.add(f.replace(/\.md$/, ""));
-				}
-			} else {
-				const folderFile = this.app.vault.getAbstractFileByPath(folder);
-				if (folderFile instanceof TFolder) {
-					for (const child of folderFile.children) {
-						if (child instanceof TFile && child.extension === "md") {
-							tagSet.add(child.basename);
-						}
-					}
-				}
-			}
-		}
-		return [...tagSet];
+		return this.knowledgeService.loadExistingKnowledgeTags();
 	}
 
 	async syncKnowledgeFolder(tags: string[], links: { label: string; path: string }[], folderOverride?: string) {
-		const folder = folderOverride || this.rootPath(this.settings.wrongKnowledgeFolder);
-		if (!folder) return;
-		if (isAbs(folder)) {
-			if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
-			for (const tag of tags) {
-				const fp = folder + "\\" + tag + ".md";
-				const existingLinks: string[] = [];
-				if (fs.existsSync(fp)) {
-					const content = fs.readFileSync(fp, "utf-8");
-					const linkMatches = content.match(/\[\[([^\]]+)\]\]/g);
-					if (linkMatches) existingLinks.push(...linkMatches.map(l => l.replace(/\[\[|\]\]/g, "")));
-				}
-				const allLinks = [...new Set([...existingLinks, ...links.map(l => l.label)])].sort();
-				const body = `---\ntags: [知识点]\n---\n# ${tag}\n\n## 相关题目\n${allLinks.filter(l => l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n\n## 相关错题\n${allLinks.filter(l => !l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n`;
-				fs.writeFileSync(fp, body, "utf-8");
-			}
-		} else {
-			const folderObj = this.app.vault.getAbstractFileByPath(folder);
-			if (!folderObj || !(folderObj instanceof TFolder)) {
-				await this.app.vault.createFolder(folder).catch(() => {});
-			}
-			for (const tag of tags) {
-				const fp = folder + "/" + tag + ".md";
-				const existingFile = this.app.vault.getAbstractFileByPath(fp);
-				const existingLinks: string[] = [];
-				if (existingFile instanceof TFile) {
-					const content = await this.app.vault.read(existingFile);
-					const linkMatches = content.match(/\[\[([^\]]+)\]\]/g);
-					if (linkMatches) existingLinks.push(...linkMatches.map(l => l.replace(/\[\[|\]\]/g, "")));
-				}
-				const allLinks = [...new Set([...existingLinks, ...links.map(l => l.label)])].sort();
-				const body = `---\ntags: [知识点]\n---\n# ${tag}\n\n## 相关题目\n${allLinks.filter(l => l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n\n## 相关错题\n${allLinks.filter(l => !l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n`;
-				if (existingFile instanceof TFile) {
-					await this.app.vault.modify(existingFile, body);
-				} else {
-					await this.app.vault.create(fp, body);
-				}
-			}
-		}
+		return this.knowledgeService.syncKnowledgeFolder(tags, links, folderOverride);
 	}
 
 	async rebuildKnowledgeIndex() {
-		const tagMap: Record<string, { label: string; path: string }[]> = {};
-		const addLink = (tag: string, label: string, p: string) => {
-			const arr = tagMap[tag] || (tagMap[tag] = []);
-			if (!arr.some(l => l.label === label)) arr.push({ label, path: p });
-		};
-		const wrongNotes = await this.loadAllWrongNotes();
-		for (const n of wrongNotes) {
-			for (const t of knowledgeTags(n.tags)) addLink(t, n.baseName, n.filePath);
-		}
-		const extractTagsFromFile = async (file: TFile, folder: string) => {
-			try {
-				let content = "";
-				if (isAbs(folder)) { content = readFileStr(file.path); } else { content = await this.app.vault.read(file); }
-				const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-				if (fmMatch) {
-					const tagMatch = fmMatch[1]!.match(/tags:\s*\[([^\]]*)\]/);
-					if (tagMatch) {
-						const tags = tagMatch[1]!.split(",").map(s => s.trim()).filter(Boolean);
-						for (const t of knowledgeTags(tags)) addLink(t, file.basename, file.path);
-					}
-				}
-			} catch { /* skip */ }
-		};
-		const listMdFiles = (folder: string): TFile[] => {
-			if (isAbs(folder)) {
-				try {
-					if (!fs.existsSync(folder)) return [];
-					return fs.readdirSync(folder).filter((f: string) => f.endsWith(".md")).map((f: string) => {
-						const fp = path.join(folder, f);
-						const stat = fs.statSync(fp);
-						return { name: f, path: fp, basename: f.replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
-					});
-				} catch { return []; }
-			}
-			try {
-				const tfolder = this.app.vault.getAbstractFileByPath(folder);
-				if (!tfolder || !(tfolder instanceof TFolder)) return [];
-				return (tfolder.children as TFile[]).filter(f => f instanceof TFile && f.name.endsWith(".md"));
-			} catch { return []; }
-		};
-		const qFolder = this.rootPath(this.settings.questionFolder);
-		if (qFolder) {
-			for (const f of listMdFiles(qFolder)) await extractTagsFromFile(f, qFolder);
-		}
-		const nFolder = this.rootPath(this.settings.noteViewFolder);
-		if (nFolder) {
-			for (const f of listMdFiles(nFolder)) await extractTagsFromFile(f, nFolder);
-		}
-		const allTags = Object.keys(tagMap);
-		const knowledgeFolders = [this.rootPath(this.settings.questionKnowledgeFolder), this.rootPath(this.settings.noteKnowledgeFolder), this.rootPath(this.settings.wrongKnowledgeFolder)];
-		for (const kf of knowledgeFolders) {
-			if (!kf) continue;
-			if (allTags.length > 0) await this.syncKnowledgeFolder(allTags, [], kf);
-			for (const [tag, links] of Object.entries(tagMap)) {
-				await this.syncKnowledgeFolder([tag], links, kf);
-			}
-		}
+		return this.knowledgeService.rebuildKnowledgeIndex();
 	}
 
 	async deleteWrongNote(filePath: string) {
@@ -337,81 +185,11 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	}
 
 	async getWeakPoints(): Promise<{ tag: string; count: number; questions: WrongAnswerNote[] }[]> {
-		const notes = await this.loadAllWrongNotes();
-		const threshold = this.settings.weakPointThreshold || 2;
-		const tagMap: Record<string, WrongAnswerNote[]> = {};
-		for (const n of notes) {
-			for (const t of knowledgeTags(n.tags)) {
-				if (!tagMap[t]) tagMap[t] = [];
-				tagMap[t].push(n);
-			}
-		}
-		return Object.entries(tagMap)
-			.filter(([_, list]) => list.length >= threshold)
-			.map(([tag, list]) => ({ tag, count: list.length, questions: list }))
-			.sort((a, b) => b.count - a.count);
+		return this.knowledgeService.getWeakPoints();
 	}
 
 	async migrateKnowledgeLinks() {
-		const notes = await this.loadAllWrongNotes(true);
-		const mocFolder = this.rootPath(this.settings.wrongKnowledgeFolder);
-		await ensureFolder(this.app, mocFolder);
-		const allTagLinks: Record<string, string[]> = {};
-		let updated = 0;
-
-		for (const note of notes) {
-			const kp = knowledgeTags(note.tags);
-			if (kp.length === 0) continue;
-			const hasLinks = note.resultText.includes("**知识点：**");
-			if (hasLinks) {
-				for (const tag of kp) {
-					const noteBaseName = note.baseName;
-					if (!allTagLinks[tag]) allTagLinks[tag] = [];
-					if (!allTagLinks[tag].includes(noteBaseName)) allTagLinks[tag].push(noteBaseName);
-				}
-				continue;
-			}
-			const knowledgeLinkText = "\n\n**知识点：** " + kp.map(t => "[[" + t + "]]").join(" ") + "\n";
-			if (isAbs(this.rootPath(this.settings.wrongBookFolder))) {
-				const content = readFileStr(note.filePath);
-				writeFileStr(note.filePath, content + knowledgeLinkText);
-			} else {
-				const file = this.app.vault.getAbstractFileByPath(note.filePath);
-				if (file instanceof TFile) {
-					const content = await this.app.vault.read(file);
-					await this.app.vault.modify(file, content + knowledgeLinkText);
-				}
-			}
-			for (const tag of kp) {
-				const noteBaseName = note.baseName;
-				if (!allTagLinks[tag]) allTagLinks[tag] = [];
-				if (!allTagLinks[tag].includes(noteBaseName)) allTagLinks[tag].push(noteBaseName);
-			}
-			updated++;
-		}
-
-		for (const [tag, linkNames] of Object.entries(allTagLinks)) {
-			const mocPath = mocFolder + "/" + safeName(tag) + ".md";
-			const fm = buildFM({ tags: ["知识点", tag], date: todayStr() });
-			let body = "# " + tag + "\n\n";
-			body += "> 知识点索引（MOC），由智学助手自动维护\n\n";
-			body += "## 相关错题\n\n";
-			for (const name of linkNames) {
-				body += "- [[" + name + "]]\n";
-			}
-			try {
-				if (isAbs(mocFolder)) {
-					writeFileStr(mocPath, fm + body);
-				} else {
-					const existingFile = this.app.vault.getAbstractFileByPath(mocPath);
-					if (existingFile instanceof TFile) await this.app.vault.modify(existingFile, fm + body);
-					else await this.app.vault.create(mocPath, fm + body);
-				}
-			} catch { /* empty */ }
-		}
-
-		if (updated > 0) new Notice("已为 " + updated + " 条错题补充知识点链接");
-		this.invalidateCache();
+		return this.knowledgeService.migrateKnowledgeLinks();
 	}
 
 	async exportToFile(text: string, defaultName: string, format: "md" | "word" | "pdf", title?: string, source?: string) {
@@ -629,6 +407,9 @@ export { buildFileTree } from "./utils/filetree";
 export { stripAnswerSummarySection, splitSemantic, normalizeAnswerSteps, splitAnswerContent, fixSequentialNumbers, normalizeExamContent, highlightTechTerms, highlightTechHtml } from "./utils/layout";
 export { buildWordParagraphs, buildExportHtml, exportPdfDirect } from "./utils/exporter";
 export { getElectronRemote } from "./utils/electron";
+export { chatLLM } from "./services/llmService";
+export { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, buildExamFrontmatter } from "./services/questionService";
+export { KnowledgeService, buildTaggingPrompt, parseTaggedResult } from "./services/knowledgeService";
 export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource } from "./types";
 export { MainSidebarView } from "./views/sidebarView";
 export { QuestionGeneratorSettingTab } from "./views/settingTab";
