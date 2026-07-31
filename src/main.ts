@@ -1084,10 +1084,10 @@ class MainSidebarView extends ItemView {
 		container.empty();
 		container.addClass("question-generator-sidebar");
 
-		const header = container.createDiv({ attr: { style: "padding:12px 14px 8px;border-bottom:1px solid var(--background-modifier-border);" } });
-		header.createDiv({ text: "智学助手", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:8px;" } });
+		const header = container.createDiv({ cls: "qg-header", attr: { style: "padding:14px 16px 10px;" } });
+		header.createDiv({ text: "智学助手", attr: { style: "font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
 
-		const nav = container.createDiv({ attr: { style: "display:flex;gap:2px;padding:4px;background:var(--background-secondary);border-radius:6px;margin-bottom:10px;" } });
+		const nav = container.createDiv({ cls: "qg-nav", attr: { style: "display:flex;margin:0 14px 12px;" } });
 		const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "settings"; label: string; icon: string }[] = [
 			{ key: "home", label: "首页", icon: "🏠" },
 			{ key: "questions", label: "题目", icon: "📝" },
@@ -1098,7 +1098,7 @@ class MainSidebarView extends ItemView {
 		];
 		this.navButtons.clear();
 		for (const item of navItems) {
-			const btn = nav.createDiv({ attr: { style: "flex:1;text-align:center;padding:5px 0;border-radius:4px;cursor:pointer;font-size:16px;transition:background 0.15s;" + (this.activeSection === item.key ? "background:var(--background-modifier-hover);font-weight:600;" : "") } });
+			const btn = nav.createDiv({ cls: "qg-nav-item" + (this.activeSection === item.key ? " qg-nav-item-active" : ""), attr: { style: "flex:1;text-align:center;padding:6px 0;cursor:pointer;font-size:15px;" } });
 			btn.setText(item.icon + " " + item.label);
 			btn.addEventListener("click", () => {
 				this.activeSection = item.key;
@@ -1264,6 +1264,9 @@ class MainSidebarView extends ItemView {
 			legend.createDiv({ attr: { style: "width:" + CELL + "px;height:" + CELL + "px;border-radius:2px;background:" + palette[i] + ";" } });
 		}
 		legend.createSpan({ text: "More" });
+
+		wrap.style.paddingRight = "12px";
+		window.requestAnimationFrame(() => { wrap.scrollLeft = wrap.scrollWidth; });
 	}
 
 	async renderHomeDefault() {
@@ -1273,9 +1276,9 @@ class MainSidebarView extends ItemView {
 
 		const stats = await this.getStats();
 
-		const statsGrid = el.createDiv({ attr: { style: "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;" } });
+		const statsGrid = el.createDiv({ cls: "qg-stat-grid", attr: { style: "display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;" } });
 		const miniCard = (label: string, value: string, color?: string) => {
-			const c = statsGrid.createDiv({ attr: { style: "text-align:center;padding:10px 6px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);cursor:pointer;" } });
+			const c = statsGrid.createDiv({ cls: "qg-stat-card", attr: { style: "text-align:center;padding:14px 6px;border-radius:12px;cursor:pointer;" } });
 			c.createDiv({ text: value, attr: { style: "font-size:29px;font-weight:bold;" + (color ? "color:" + color + ";" : "") } });
 			c.createDiv({ text: label, attr: { style: "color:var(--text-muted);font-size:17px;margin-top:2px;" } });
 			return c;
@@ -1289,7 +1292,7 @@ class MainSidebarView extends ItemView {
 		const wCard = miniCard("错题", String(stats.totalWrong), stats.totalWrong > 0 ? "var(--color-red)" : undefined);
 		wCard.addEventListener("click", () => { this.activeSection = "wrong"; this.wrongView = "list"; void this.render(); });
 
-		const heatmapSection = el.createDiv({ attr: { style: "margin-bottom:14px;padding:12px;border-radius:8px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);overflow:hidden;" } });
+		const heatmapSection = el.createDiv({ cls: "qg-section-card", attr: { style: "margin-bottom:16px;padding:14px;border-radius:16px;overflow:hidden;" } });
 		const heatmapData = await this.getActivityData();
 		this.renderHeatmap(heatmapSection, heatmapData);
 
@@ -1311,7 +1314,7 @@ class MainSidebarView extends ItemView {
 		}
 
 		if (stats.dueCount > 0) {
-			const reviewSection = el.createDiv({ attr: { style: "padding:10px;border-radius:6px;border:2px solid var(--interactive-accent);background:color-mix(in srgb, var(--interactive-accent) 5%, transparent);margin-bottom:14px;" } });
+			const reviewSection = el.createDiv({ cls: "qg-review-banner", attr: { style: "padding:12px 14px;border-radius:16px;margin-bottom:16px;" } });
 			reviewSection.createDiv({ text: "今日待复习 " + stats.dueCount + " 题", attr: { style: "font-weight:600;font-size:19px;margin-bottom:6px;" } });
 			const dueNotes = await this.getDueNotes();
 			for (const note of dueNotes.slice(0, PREVIEW_ITEMS_LIMIT)) {

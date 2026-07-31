@@ -1,47 +1,327 @@
-/* Smart Question Tutor styles */
+/* ============================================================
+   Smart Question Tutor — Craft-style design
+   Soft, rounded, layered shadows, refined typography.
+   ============================================================ */
 
-/* Common hover effect */
+/* ---------- Craft design tokens (scoped to sidebar) ---------- */
+.question-generator-sidebar {
+	--qg-radius-sm: 8px;
+	--qg-radius-md: 12px;
+	--qg-radius-lg: 16px;
+	--qg-radius-pill: 999px;
+
+	--qg-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+	--qg-shadow-2: 0 2px 6px rgba(0, 0, 0, 0.05), 0 4px 14px rgba(0, 0, 0, 0.06);
+	--qg-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.08);
+
+	--qg-accent: var(--interactive-accent);
+
+	/* Softened border — Craft barely uses borders */
+	--qg-border: var(--background-modifier-border);
+}
+
+.theme-dark .question-generator-sidebar {
+	--qg-surface-1: #1e1e20;
+	--qg-surface-2: #27272a;
+	--qg-surface-3: #303034;
+	--qg-bg: #161617;
+}
+
+.theme-light .question-generator-sidebar {
+	--qg-surface-1: #ffffff;
+	--qg-surface-2: #f5f5f6;
+	--qg-surface-3: #ececee;
+	--qg-bg: #f7f7f8;
+}
+
+/* ---------- Sidebar root ---------- */
+.question-generator-sidebar {
+	background: var(--qg-bg);
+	font-feature-settings: "tnum", "kern";
+}
+
+/* ---------- Header ---------- */
+.qg-header {
+	border-bottom: 1px solid color-mix(in srgb, var(--qg-border) 50%, transparent) !important;
+	margin-bottom: 12px;
+	background: linear-gradient(180deg, color-mix(in srgb, var(--qg-accent) 4%, transparent), transparent);
+}
+
+.qg-header > div {
+	font-weight: 700 !important;
+	letter-spacing: -0.01em;
+}
+
+/* ---------- Nav: Craft segmented control ---------- */
+.qg-nav {
+	background: var(--qg-surface-2) !important;
+	border-radius: var(--qg-radius-pill) !important;
+	border: 1px solid transparent !important;
+	box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), var(--qg-shadow-1) !important;
+	padding: 3px !important;
+	gap: 2px !important;
+}
+
+.qg-nav-item {
+	border-radius: var(--qg-radius-pill) !important;
+	padding: 6px 0 !important;
+	font-weight: 500 !important;
+	color: var(--text-muted);
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+	white-space: nowrap;
+}
+
+.qg-nav-item:hover {
+	background: var(--qg-surface-3) !important;
+	color: var(--text-normal);
+}
+
+.qg-nav-item-active {
+	background: var(--qg-surface-1) !important;
+	color: var(--text-normal) !important;
+	font-weight: 600 !important;
+	box-shadow: var(--qg-shadow-1) !important;
+}
+
+/* ---------- Action rows (home quick actions / tools) ---------- */
+.qg-action-row {
+	display: flex !important;
+	align-items: center !important;
+	gap: 10px !important;
+	padding: 13px 16px !important;
+	margin-bottom: 8px !important;
+	border-radius: var(--qg-radius-md) !important;
+	border: 1px solid transparent !important;
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+	cursor: pointer !important;
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.qg-action-row:hover {
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-hover) !important;
+	transform: translateY(-1px);
+}
+
+.qg-action-label {
+	font-size: 17px !important;
+	font-weight: 550 !important;
+	letter-spacing: -0.005em;
+}
+
+.qg-badge {
+	font-size: 13px !important;
+	padding: 2px 8px !important;
+	border-radius: var(--qg-radius-pill) !important;
+	background: var(--color-red) !important;
+	color: white !important;
+	font-weight: 700 !important;
+}
+
+/* ---------- Stats mini-cards ---------- */
+.qg-stat-card {
+	border-radius: var(--qg-radius-md) !important;
+	border: 1px solid transparent !important;
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.qg-stat-card:hover {
+	box-shadow: var(--qg-shadow-hover) !important;
+	transform: translateY(-1px);
+}
+
+.qg-stat-card > div:first-child {
+	font-size: 30px !important;
+	letter-spacing: -0.02em;
+}
+
+.qg-stat-card > div:last-child {
+	font-size: 15px !important;
+	letter-spacing: 0.01em;
+}
+
+/* ---------- Section cards (heatmap, review banner, etc.) ---------- */
+.qg-section-card {
+	background: var(--qg-surface-1) !important;
+	border: 1px solid transparent !important;
+	box-shadow: var(--qg-shadow-2) !important;
+}
+
+.qg-review-banner {
+	background: linear-gradient(160deg, color-mix(in srgb, var(--qg-accent) 12%, var(--qg-surface-1)), var(--qg-surface-1)) !important;
+	border: 1px solid color-mix(in srgb, var(--qg-accent) 30%, transparent) !important;
+	box-shadow: var(--qg-shadow-2) !important;
+}
+
+/* ---------- Section headings ---------- */
+.question-generator-sidebar div[style*="text-transform:uppercase"] {
+	font-size: 13px !important;
+	font-weight: 700 !important;
+	letter-spacing: 0.06em !important;
+	color: var(--text-faint) !important;
+	margin-bottom: 10px !important;
+}
+
+/* ---------- Generic buttons: pill-shaped, soft ---------- */
+.question-generator-sidebar button {
+	border-radius: var(--qg-radius-sm) !important;
+	border: 1px solid var(--qg-border) !important;
+	background: var(--qg-surface-2) !important;
+	color: var(--text-normal) !important;
+	font-weight: 550 !important;
+	transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+	cursor: pointer !important;
+}
+
+.question-generator-sidebar button:hover {
+	background: var(--qg-surface-3) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+}
+
+.question-generator-sidebar button.mod-cta {
+	background: var(--interactive-accent) !important;
+	border-color: transparent !important;
+	color: var(--text-on-accent) !important;
+	border-radius: var(--qg-radius-pill) !important;
+	box-shadow: 0 2px 8px color-mix(in srgb, var(--interactive-accent) 35%, transparent) !important;
+}
+
+.question-generator-sidebar button.mod-cta:hover {
+	filter: brightness(1.08);
+	box-shadow: 0 4px 14px color-mix(in srgb, var(--interactive-accent) 40%, transparent) !important;
+}
+
+/* ---------- Inputs: soft fields ---------- */
+.question-generator-sidebar input[type="text"],
+.question-generator-sidebar input[type="number"],
+.question-generator-sidebar select,
+.question-generator-sidebar textarea {
+	border-radius: var(--qg-radius-sm) !important;
+	border: 1px solid var(--qg-border) !important;
+	background: var(--qg-surface-1) !important;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.question-generator-sidebar input[type="text"]:focus,
+.question-generator-sidebar input[type="number"]:focus,
+.question-generator-sidebar select:focus,
+.question-generator-sidebar textarea:focus {
+	border-color: var(--interactive-accent) !important;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--interactive-accent) 20%, transparent) !important;
+	outline: none !important;
+}
+
+/* ---------- Filter/sort pills (review tab) ---------- */
+.question-generator-sidebar div[style*="display:flex;gap:2px"] > button {
+	border-radius: var(--qg-radius-pill) !important;
+	border: 1px solid transparent !important;
+}
+
+/* ---------- Answer option rows ---------- */
+.qg-option-row {
+	border-radius: var(--qg-radius-md) !important;
+	border: 1px solid transparent !important;
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+	padding: 9px 12px !important;
+	transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.qg-option-row:hover {
+	background: var(--qg-surface-2) !important;
+	box-shadow: var(--qg-shadow-hover) !important;
+	transform: translateY(-1px);
+}
+
+.qg-option-row:has(input:checked) {
+	background: color-mix(in srgb, var(--interactive-accent) 10%, var(--qg-surface-1)) !important;
+	box-shadow: 0 0 0 1.5px var(--interactive-accent) !important;
+}
+
+/* ---------- Question cards ---------- */
+.question-generator-sidebar div[style*="border-radius:8px;padding:12px 14px"] {
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+	border: 1px solid transparent !important;
+}
+
+/* ---------- Review rows ---------- */
+.question-generator-sidebar div[style*="border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px"] {
+	border-radius: var(--qg-radius-sm) !important;
+	border-color: transparent !important;
+	background: var(--qg-surface-1) !important;
+	box-shadow: var(--qg-shadow-1) !important;
+	transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ---------- Heatmap container ---------- */
+.question-generator-sidebar div[style*="overflow:hidden"] {
+	border-radius: var(--qg-radius-md) !important;
+}
+
+/* ---------- Summary bar ---------- */
+.qg-summary {
+	border-radius: var(--qg-radius-md) !important;
+	background: var(--qg-surface-2) !important;
+	border: 1px solid transparent !important;
+	box-shadow: var(--qg-shadow-1) !important;
+}
+
+/* ---------- Wrong note list items ---------- */
+.qg-file-btn {
+	border-radius: var(--qg-radius-sm) !important;
+	border-color: transparent !important;
+	background: var(--qg-surface-2) !important;
+	transition: all 0.15s !important;
+}
+
+/* ---------- Scrollbar (subtle) ---------- */
+.question-generator-sidebar ::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+.question-generator-sidebar ::-webkit-scrollbar-thumb {
+	background: var(--qg-surface-3);
+	border-radius: var(--qg-radius-pill);
+}
+
+.question-generator-sidebar ::-webkit-scrollbar-thumb:hover {
+	background: var(--text-faint);
+}
+
+/* ---------- Misc ---------- */
+.qg-exp-title {
+	color: var(--interactive-accent) !important;
+}
+
+.qg-exp-top {
+	background: var(--qg-surface-2) !important;
+	border-radius: var(--qg-radius-sm) !important;
+	padding: 8px 10px;
+}
+
+/* keep existing helpers */
 .qg-hover-bg:hover { background: var(--background-modifier-hover); }
-
-/* Home: action row */
-.qg-action-row { display: flex; align-items: center; gap: 8px; padding: 10px; margin-bottom: 6px; border-radius: 6px; border: 1px solid var(--background-modifier-border); cursor: pointer; transition: background 0.15s; }
-.qg-action-label { font-size: 19px; font-weight: 500; flex: 1; }
-.qg-badge { font-size: 16px; padding: 1px 6px; border-radius: 8px; background: var(--color-red); color: white; font-weight: bold; }
-
-/* File picker: items */
 .qg-file-tag { color: var(--interactive-accent); font-size: 16px; flex-shrink: 0; }
 .qg-file-size { color: var(--text-muted); font-size: 16px; flex-shrink: 0; }
 .qg-file-date { color: var(--text-muted); font-size: 17px; flex-shrink: 0; }
 .qg-file-actions { display: flex; gap: 2px; flex-shrink: 0; }
-.qg-file-btn { padding: 1px 5px; border-radius: 3px; cursor: pointer; font-size: 17px; background: var(--background-secondary); border: 1px solid var(--background-modifier-border); transition: background 0.15s; }
 .qg-file-btn:hover { background: var(--background-modifier-hover); }
-
-/* Wrong note: tags and delete */
 .qg-note-tag { color: var(--interactive-accent); font-size: 16px; }
 .qg-note-del { color: var(--text-faint); cursor: pointer; font-size: 20px; padding: 0 4px; border-radius: 4px; flex-shrink: 0; }
-
-/* Answer: summary bar */
-.qg-summary { padding: 8px 12px; margin-bottom: 12px; border-radius: 6px; background: var(--background-secondary); font-size: 18px; color: var(--text-muted); }
-
-/* Answer: explanation */
-.qg-exp-top { margin-top: 6px; }
 .qg-exp-title { font-size: 17px; color: #1565C0; font-weight: 700; margin-bottom: 2px; }
 .qg-exp-line { color: var(--text-muted); font-size: 18px; line-height: 1.6; }
-
-/* Answer: option rows */
-.qg-opts-col { display: flex; flex-direction: column; gap: 4px; }
-.qg-option-row { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 10px; border-radius: 4px; border: 1px solid var(--background-modifier-border); font-size: 19px; transition: all 0.15s; }
-.qg-option-row:hover { background: var(--background-modifier-hover); }
+.qg-opts-col { display: flex; flex-direction: column; gap: 6px; }
 .qg-option-text { flex: 1; line-height: 1.5; }
 .qg-input-wide { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--background-modifier-border); font-size: 19px; box-sizing: border-box; }
-
-/* Answer: wrong note area */
 .qg-mt10 { margin-top: 10px; }
 .qg-wrong-btn { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 18px; }
 .qg-wrong-area { margin-top: 8px; }
 .qg-label-text { font-size: 18px; margin-bottom: 4px; }
 .qg-home-btn { margin-top: 10px; text-align: center; }
 .qg-btn-home { padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 18px; border: 1px solid var(--background-modifier-border); background: var(--background-secondary); color: var(--text-normal); }
-
-/* Utility */
 .qg-hidden { display: none; }
