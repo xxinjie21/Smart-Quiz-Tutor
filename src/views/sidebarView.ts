@@ -233,7 +233,7 @@ export class MainSidebarView extends ItemView {
 		container.createDiv({ text: "学习热力图", attr: { style: "font-size:16px;font-weight:600;color:var(--text-muted);margin-bottom:2px;" } });
 		container.createDiv({ text: "过去一年共 " + totalActivities + " 次学习活动，" + activeDays + " 天有记录", attr: { style: "color:var(--text-muted);font-size:13px;margin-bottom:10px;" } });
 
-		const wrap = container.createDiv({ attr: { style: "overflow-x:auto;" } });
+		const wrap = container.createDiv({ attr: { style: "overflow-x:auto;padding-right:12px;" } });
 		const outer = wrap.createDiv({ attr: { style: "display:inline-flex;gap:0;" } });
 
 		const dayCol = outer.createDiv({ attr: { style: "width:" + DAY_LABEL_W + "px;padding-top:" + MONTH_LABEL_H + "px;" } });
@@ -293,7 +293,6 @@ export class MainSidebarView extends ItemView {
 		}
 		legend.createSpan({ text: "More" });
 
-		wrap.style.paddingRight = "12px";
 		window.requestAnimationFrame(() => { wrap.scrollLeft = wrap.scrollWidth; });
 	}
 

@@ -71,7 +71,7 @@ export function parseTypeSpec(typeStr: string): { type: string; count: number }[
 	for (const piece of typeStr.split(/[、,，;；]/).map((s) => s.trim()).filter(Boolean)) {
 		const m = piece.match(/^(.+?)(\d+)$/);
 		if (m && m[1]) {
-			const type = m[1]!.trim();
+			const type = m[1].trim();
 			const count = parseInt(m[2]!, 10);
 			if (type && count > 0) out.push({ type, count });
 		}
