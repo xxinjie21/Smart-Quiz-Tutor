@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting } from "obsidian";
 
 import type QuestionGeneratorPlugin from "../main";
 
@@ -34,6 +34,10 @@ export class QuestionGeneratorSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("笔记文件夹")
 			.addText(cb => cb.setPlaceholder("笔记").setValue(s.noteViewFolder).onChange(v => { s.noteViewFolder = v; void this.plugin.saveSettings(); }));
+		new Setting(containerEl)
+			.setName("转换md文件夹")
+			.setDesc("对非md文件（txt/rtf/docx/PDF/图片）生成题目或识别试卷时，把转换后的文本保存为md文件到这里，留空则关闭")
+			.addText(cb => cb.setValue(s.convertedMdFolder).onChange(v => { s.convertedMdFolder = v; void this.plugin.saveSettings(); }));
 		new Setting(containerEl)
 			.setName("AI识别文件夹")
 			.addText(cb => cb.setValue(s.extractedExamFolder).onChange(v => { s.extractedExamFolder = v; void this.plugin.saveSettings(); }));
@@ -151,36 +155,5 @@ export class QuestionGeneratorSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("错题排序")
 			.addDropdown(cb => { cb.addOption("date", "按日期").addOption("tag", "按知识点").addOption("review", "按复习时间").setValue(s.sortWrongBy).onChange(v => { s.sortWrongBy = v as "date" | "tag" | "review"; void this.plugin.saveSettings(); }); });
-
-		// --- 实用工具 ---
-		new Setting(containerEl).setName("实用工具").setHeading();
-		containerEl.createDiv({ text: "首页「实用工具」区域的外部链接", attr: { style: "color:var(--text-muted);font-size:14px;margin-bottom:8px;" } });
-		const toolsContainer = containerEl.createDiv();
-		const renderTools = () => {
-			toolsContainer.empty();
-			s.customTools.forEach((tool, idx) => {
-				const row = toolsContainer.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:6px;align-items:center;" } });
-				const nameInp = row.createEl("input", { attr: { type: "text", value: tool.label, style: "width:120px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);", placeholder: "名称" } });
-				nameInp.addEventListener("change", () => { s.customTools[idx]!.label = nameInp.value; void this.plugin.saveSettings(); });
-				const urlInp = row.createEl("input", { attr: { type: "text", value: tool.url, style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);", placeholder: "https://..." } });
-				urlInp.addEventListener("change", () => { s.customTools[idx]!.url = urlInp.value; void this.plugin.saveSettings(); });
-				const delBtn = row.createEl("button", { text: "✕", attr: { style: "padding:4px 7px;border-radius:3px;cursor:pointer;font-size:13px;border:none;background:var(--background-secondary);color:var(--text-muted);" } });
-				delBtn.addEventListener("click", () => { s.customTools.splice(idx, 1); void this.plugin.saveSettings(); renderTools(); });
-			});
-		};
-		renderTools();
-		new Setting(containerEl)
-			.addButton(cb => cb.setButtonText("+ 添加工具").onClick(() => { s.customTools.push({ label: "", url: "" }); void this.plugin.saveSettings(); renderTools(); }));
-
-		// --- 数据管理 ---
-		new Setting(containerEl).setName("数据管理").setHeading();
-		new Setting(containerEl)
-			.setName("重建知识点索引")
-			.setDesc("扫描题目/笔记/错题文件夹中的标签，重新生成知识点文件夹中的关联索引文件。手动修改标签后可点击。")
-			.addButton(cb => cb.setButtonText("重建").onClick(() => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); })(); }));
-		new Setting(containerEl)
-			.setName("清除缓存")
-			.setDesc("清空内存中的错题列表缓存，下次访问时重新从文件读取。一般无需手动操作。")
-			.addButton(cb => cb.setButtonText("清除").onClick(() => { this.plugin.invalidateCache(); new Notice("缓存已清除"); }));
 	}
 }

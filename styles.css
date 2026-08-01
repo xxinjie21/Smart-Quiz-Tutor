@@ -110,6 +110,14 @@
 	letter-spacing: -0.005em;
 }
 
+.qg-action-desc {
+	font-size: 14px !important;
+	font-weight: 400 !important;
+	color: var(--text-muted) !important;
+	margin-top: 1px !important;
+	letter-spacing: 0 !important;
+}
+
 .qg-badge {
 	font-size: 13px !important;
 	padding: 2px 8px !important;
@@ -302,6 +310,8 @@
 	background: var(--qg-surface-2) !important;
 	border-radius: var(--qg-radius-sm) !important;
 	padding: 8px 10px;
+	margin-top: 10px;
+	border-top: 1px solid var(--background-modifier-border);
 }
 
 /* keep existing helpers */

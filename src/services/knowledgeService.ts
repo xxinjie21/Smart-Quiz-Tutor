@@ -1,7 +1,7 @@
 import { Notice, TFile, TFolder, type App } from "obsidian";
 import type { PluginSettings, WrongAnswerNote } from "../types";
 import { parseFM, buildFM, knowledgeTags } from "../utils/frontmatter";
-import { isAbs, readFileStr, writeFileStr, listMdFiles, ensureFolder } from "../utils/fs-utils";
+import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder } from "../utils/fs-utils";
 import { safeName } from "../utils/text";
 import { todayStr } from "../utils/review";
 import * as fs from "fs";
@@ -152,20 +152,20 @@ export class KnowledgeService {
 			} catch { /* skip */ }
 		};
 		const listMdFiles = (folder: string): TFile[] => {
+			const excludes = [this.p.rootPath(this.p.settings.questionKnowledgeFolder), this.p.rootPath(this.p.settings.noteKnowledgeFolder), this.p.rootPath(this.p.settings.wrongKnowledgeFolder)].filter(Boolean);
 			if (isAbs(folder)) {
 				try {
 					if (!fs.existsSync(folder)) return [];
-					return fs.readdirSync(folder).filter((f: string) => f.endsWith(".md")).map((f: string) => {
-						const fp = path.join(folder, f);
+					return listMdFilesRecursive(folder, excludes).map((fp: string) => {
 						const stat = fs.statSync(fp);
-						return { name: f, path: fp, basename: f.replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
+						return { name: path.basename(fp), path: fp, basename: path.basename(fp).replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
 					});
 				} catch { return []; }
 			}
 			try {
-				const tfolder = this.p.app.vault.getAbstractFileByPath(folder);
-				if (!tfolder || !(tfolder instanceof TFolder)) return [];
-				return (tfolder.children as TFile[]).filter(f => f instanceof TFile && f.name.endsWith(".md"));
+				const prefix = folder.endsWith("/") ? folder : folder + "/";
+				const exclPrefixes = excludes.map(p => (p.endsWith("/") ? p : p + "/"));
+				return this.p.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e)));
 			} catch { return []; }
 		};
 		const qFolder = this.p.rootPath(this.p.settings.questionFolder);
@@ -183,6 +183,30 @@ export class KnowledgeService {
 			if (allTags.length > 0) await this.syncKnowledgeFolder(allTags, [], kf);
 			for (const [tag, links] of Object.entries(tagMap)) {
 				await this.syncKnowledgeFolder([tag], links, kf);
+			}
+		}
+		for (const kf of knowledgeFolders) {
+			if (!kf) continue;
+			await this.removeStaleTagFiles(kf, allTags);
+		}
+	}
+
+	private async removeStaleTagFiles(folder: string, keepTags: string[]) {
+		const keep = new Set(keepTags);
+		if (isAbs(folder)) {
+			try {
+				if (!fs.existsSync(folder)) return;
+				for (const f of listMdFiles(folder)) {
+					if (!keep.has(f.replace(/\.md$/, ""))) fs.unlinkSync(folder + "\\" + f);
+				}
+			} catch { /* skip */ }
+			return;
+		}
+		const folderObj = this.p.app.vault.getAbstractFileByPath(folder);
+		if (!(folderObj instanceof TFolder)) return;
+		for (const child of folderObj.children) {
+			if (child instanceof TFile && child.extension === "md" && !keep.has(child.basename)) {
+				try { await this.p.app.fileManager.trashFile(child); } catch { /* skip */ }
 			}
 		}
 	}

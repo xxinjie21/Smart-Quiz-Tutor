@@ -55,7 +55,7 @@ export function splitSemantic(text: string): string[] {
 		}
 	}
 	if (parts.length <= 1 && trimmed.length > 60) {
-		const numSplit = trimmed.split(/(?=\d+[.、）)]\s*)/);
+		const numSplit = trimmed.split(POINT_SPLIT);
 		if (numSplit.length > 1) {
 			return numSplit.map(s => s.trim()).filter(Boolean);
 		}
@@ -64,6 +64,8 @@ export function splitSemantic(text: string): string[] {
 }
 
 const STEP_TEXT_MAP: Record<string, number> = { "第一": 1, "第二": 2, "第三": 3, "第四": 4, "第五": 5, "第六": 6, "第七": 7, "第八": 8, "第九": 9, "第十": 10, "十一": 11, "十二": 12, "十三": 13, "十四": 14, "十五": 15, "十六": 16, "十七": 17, "十八": 18, "十九": 19, "二十": 20 };
+
+const POINT_SPLIT = /(?<!\()(?=\d+\.(?!\d)|\d+[、）)])|(?=\(\d+[、.）)])/;
 
 export function normalizeAnswerSteps(text: string): string {
 	return text.replace(/(第[一二三四五六七八九十]+)[步点个方面]([：:：]?)\s*/g, (_m, step: string, colon: string) => {
@@ -76,7 +78,7 @@ export function normalizeAnswerSteps(text: string): string {
 function splitAnswerPoints(raw: string): string[] {
 	const trimmed = raw.trim();
 	if (!trimmed) return [];
-	const parts = trimmed.split(/(?=\d+[.、）)])/);
+	const parts = trimmed.split(POINT_SPLIT);
 	const result: string[] = [];
 	for (const part of parts) {
 		const p = part.trim();
@@ -138,7 +140,7 @@ export function highlightTechHtml(text: string): string {
 }
 
 export function fixSequentialNumbers(text: string): string {
-	return text.replace(/((?:^|\n)答案[：:]\s*)(.+?)(?=\n|$)/g, (_match, prefix: string, content: string) => {
+	return text.replace(/((?:^|\n)(?:\*\*)?答案(?:\*\*)?[：:]\s*)(.+?)(?=\n|$)/g, (_match, prefix: string, content: string) => {
 		const parts = content.split(/(?=\(\d+\)\s)/);
 		if (parts.length < 2) return prefix + content;
 		let seq = 0;
@@ -151,21 +153,79 @@ export function fixSequentialNumbers(text: string): string {
 	});
 }
 
+function extractLabelContent(line: string, label: string): string | null {
+	const m = line.match(new RegExp("^\\*{0,2}" + label + "\\*{0,2}[：:](.*)$"));
+	if (!m) return null;
+	return (m[1] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim();
+}
+
+function splitPoints(content: string): string[] {
+	return content.split(/(?=\d+\.(?!\d)|\d+[、）)])/).map(s => s.trim()).filter(Boolean);
+}
+
 export function normalizeExamContent(text: string): string {
 	const lines = text.split("\n");
 	const result: string[] = [];
 	let lastType = "";
+	let inAnswerBlock = false;
+	let inExplainBlock = false;
+	let answerSeq = 0;
+	let expSeq = 0;
+	const nextPoint = (raw: string): string => {
+		const cleaned = raw.trim().replace(/^(?:\*\*)?(?:\(\d+\)|\d+(?:\*\*)?[.、）)])\s*/, "").trim();
+		if (!cleaned.replace(/[（(）)\s]/g, "")) return "";
+		answerSeq++;
+		return "(" + answerSeq + ") " + cleaned;
+	};
+	const nextExpPoint = (raw: string): string => {
+		const cleaned = raw.trim().replace(/^(?:\*\*)?(?:\(\d+\)|\d+(?:\*\*)?[.、）)])\s*/, "").trim();
+		if (!cleaned.replace(/[（(）)\s]/g, "")) return "";
+		expSeq++;
+		return "(" + expSeq + ") " + cleaned;
+	};
+	const isPointLine = (t: string): boolean => /^(?:\*\*)?(?:\(\d+\)|\d+(?:\*\*)?[.、）)])/.test(t);
+	const isParenPoint = (t: string): boolean => /^(?:\*\*)?\(\d+\)/.test(t);
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i]!;
 		const trimmed = line.trim();
-		if (trimmed === "") { if (result.length > 0 && result[result.length - 1] !== "") result.push(""); continue; }
+		if (trimmed === "") {
+			inAnswerBlock = false;
+			inExplainBlock = false;
+			if (result.length > 0 && result[result.length - 1] !== "") result.push("");
+			continue;
+		}
 		if (/^#{1,6}\s+/.test(trimmed)) {
+			if (/^####\s+/.test(trimmed) && (inAnswerBlock || lastType === "answer")) {
+				answerSeq = 0;
+				result.push(trimmed);
+				lastType = "answer";
+				continue;
+			}
 			if (result.length > 0 && result[result.length - 1] !== "") result.push("");
 			result.push(trimmed);
 			lastType = "heading";
+			inAnswerBlock = false;
+			inExplainBlock = false;
 			continue;
 		}
-		if (/^(?:\*\*)?\d+(?:\*\*)?[.、]/.test(trimmed)) {
+		if ((inAnswerBlock || lastType === "answer") && /^[*>\s]*补充说明[：:]/.test(trimmed)) {
+			result.push("> " + trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim());
+			lastType = "answer";
+			continue;
+		}
+		if (isPointLine(trimmed)) {
+			if (inAnswerBlock || (isParenPoint(trimmed) && lastType === "answer")) {
+				const p = nextPoint(trimmed);
+				if (p) result.push(p);
+				lastType = "answer";
+				continue;
+			}
+			if (inExplainBlock) {
+				const p = nextExpPoint(trimmed);
+				if (p) result.push(p);
+				lastType = "explanation";
+				continue;
+			}
 			if (lastType === "answer" || lastType === "explanation" || lastType === "option" || lastType === "question") {
 				if (result.length > 0 && result[result.length - 1] !== "") result.push("");
 			}
@@ -174,38 +234,76 @@ export function normalizeExamContent(text: string): string {
 			continue;
 		}
 		if (/^[A-D][.、]/.test(trimmed)) {
+			if (inAnswerBlock) {
+				result.push(trimmed);
+				lastType = "answer";
+				continue;
+			}
 			result.push(trimmed);
 			lastType = "option";
 			continue;
 		}
-		if (/^(答案|标准答案|参考答案)[：:]/.test(trimmed)) {
-			if (lastType !== "heading" && lastType !== "" && lastType !== "question") {
-				if (result.length > 0 && result[result.length - 1] !== "") result.push("");
+		if (/^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/.test(trimmed)) {
+			const prev = result.length > 0 ? result[result.length - 1]! : "";
+			if (lastType === "option" || lastType === "explanation") {
+				if (prev !== "") result.push("");
+			} else if (lastType === "question" && /(?:____|_{3,}|（\s*）|\(\s*\))/.test(prev)) {
+				if (prev !== "") result.push("");
 			}
-			result.push(trimmed);
-			const content = trimmed.replace(/^(答案|标准答案|参考答案)[：:]/, "").trim();
-			if (/\d+[.、）)]/.test(content)) {
-				const points = content.split(/(?=\d+[.、）)]\s*)/).map(s => s.trim()).filter(Boolean);
+			result.push("**答案：**");
+			answerSeq = 0;
+			const content = extractLabelContent(trimmed, "(?:答案|标准答案|参考答案)") ?? "";
+			if (content) {
+				const points = splitPoints(content);
 				if (points.length > 1) {
-					result.pop();
-					const label = trimmed.match(/^(答案|标准答案|参考答案)[：:]/)![0];
-					result.push(label);
-					for (const p of points) result.push(p);
+					for (const p of points) {
+						const np = nextPoint(p);
+						if (np) result.push(np);
+					}
+				} else if (/^(?:\(\d+\)|\d+[.、）)])/.test(content)) {
+					const np = nextPoint(content);
+					if (np) result.push(np);
+				} else {
+					result[result.length - 1] = "**答案：" + content + "**";
 				}
 			}
 			lastType = "answer";
+			inAnswerBlock = true;
+			inExplainBlock = false;
 			continue;
 		}
-		if (/^解析[：:]/.test(trimmed)) {
-			if (lastType !== "heading") {
-				if (result.length > 0 && result[result.length - 1] !== "") result.push("");
+		if (/^(?:\*\*)?解析(?:\*\*)?[：:]/.test(trimmed)) {
+			result.push("**解析：**");
+			expSeq = 0;
+			const content = extractLabelContent(trimmed, "解析") ?? "";
+			if (content) {
+				const points = splitPoints(content);
+				if (points.length > 1) {
+					const firstPoint = points.shift();
+					if (points.length > 0 && firstPoint && !/^(?:\(\d+\)|\d+[.、）)])/.test(firstPoint)) {
+						result.push(firstPoint);
+					} else if (firstPoint) {
+						points.unshift(firstPoint);
+					}
+					for (const p of points) {
+						const np = nextExpPoint(p);
+						if (np) result.push(np);
+					}
+				} else if (/^(?:\(\d+\)|\d+[.、）)])/.test(content)) {
+					const np = nextExpPoint(content);
+					if (np) result.push(np);
+				} else {
+					const prose = content.replace(/^(?:\*\*)?(?:\(\d+\)|\d+(?:\*\*)?[.、）)])\s*/, "").trim();
+					result.push(prose);
+				}
 			}
-			result.push(trimmed);
 			lastType = "explanation";
+			inAnswerBlock = false;
+			inExplainBlock = true;
 			continue;
 		}
 		result.push(trimmed);
-		lastType = "text";
+		lastType = inExplainBlock ? "explanation" : "text";
 	}
 	while (result.length > 0 && result[result.length - 1] === "") result.pop();
 	return result.join("\n");

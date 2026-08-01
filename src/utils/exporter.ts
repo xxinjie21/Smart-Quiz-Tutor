@@ -83,14 +83,47 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 			continue;
 		}
 
+		// ── 答案子项 ((1) xxx)
+		if (/^\(\d+\)/.test(trimmed)) {
+			pushPara(children, {
+				runs: highlightTechTerms(trimmed),
+				spacing: { before: 2, after: 2 },
+				indent: { left: 360 }
+			});
+			lastType = "answer";
+			continue;
+		}
+
+		// ── 补充说明 (> 补充说明：xxx)
+		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
+			const noteText = trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim();
+			pushPara(children, {
+				runs: [new TextRun({ text: noteText, font: FONT, size: FSBody, italics: true, color: "666666" })],
+				spacing: { before: 2, after: 2 },
+				indent: { left: 360 }
+			});
+			lastType = "answer";
+			continue;
+		}
+
 		// ── 答案：独立板块标题（绿色加粗），内容按语义拆行
-		if (/^(答案|标准答案|参考答案)[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(答案|标准答案|参考答案)([：:])(.*)/);
-			const label = match ? (match[1] || "答案") + (match[2] || "：") : "答案：";
-			const inlineContent = match ? (match[3] || "").trim() : "";
+		if (/^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
+			const label = match ? (match[1] || "答案") + (match[3] || "：") : "答案：";
+			const inlineContent = match ? (match[4] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
 			const steps = splitAnswerContent(inlineContent);
 
 			if (lastType !== "heading" && lastType !== "") addEmptyLine(children);
+
+			if (inlineContent && steps.length <= 1) {
+				pushPara(children, {
+					runs: [new TextRun({ text: label + " " + inlineContent, bold: true, color: AnswerColor, font: FONT, size: FSBody })],
+					spacing: { before: 0, after: 0 },
+					indent: { left: 0 }
+				});
+				lastType = "answer";
+				continue;
+			}
 
 			pushPara(children, {
 				runs: [new TextRun({ text: label, bold: true, color: AnswerColor, font: FONT, size: FSBody })],
@@ -110,10 +143,10 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 		}
 
 		// ── 解析：蓝色标签 + 内容按语义拆行
-		if (/^解析[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^解析([：:])(.*)/);
+		if (/^(?:\*\*)?解析(?:\*\*)?[：:]/.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
 			const label = match ? "解析" + (match[1] || "：") : "解析：";
-			const content = match ? (match[2] || "").trim() : "";
+			const content = match ? (match[2] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
 			const contentLines = splitSemantic(content);
 
 			pushPara(children, {
@@ -205,13 +238,33 @@ export function buildExportHtml(text: string, title?: string, source?: string): 
 			continue;
 		}
 
-		if (/^(答案|标准答案|参考答案)[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(答案|标准答案|参考答案)([：:])(.*)/);
-			const label = match ? (match[1] || "答案") + (match[2] || "：") : "答案：";
-			const inlineContent = match ? (match[3] || "").trim() : "";
+		if (/^\(\d+\)/.test(trimmed)) {
+			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;">' + highlightTechHtml(htmlEscape(trimmed)) + '</p>');
+			lastType = "answer";
+			continue;
+		}
+
+		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
+			const noteText = trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim();
+			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;font-style:italic;color:#666;">' + highlightTechHtml(htmlEscape(noteText)) + '</p>');
+			lastType = "answer";
+			continue;
+		}
+
+		if (/^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
+			const label = match ? (match[1] || "答案") + (match[3] || "：") : "答案：";
+			const inlineContent = match ? (match[4] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
 			const steps = splitAnswerContent(inlineContent);
 
 			if (lastType !== "heading" && lastType !== "") parts.push('<div style="height:8px;"></div>');
+
+			if (inlineContent && steps.length <= 1) {
+				parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;"><strong style="color:#2E7D32;">' + htmlEscape(label + " " + inlineContent) + '</strong></p>');
+				lastType = "answer";
+				continue;
+			}
+
 			parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;"><strong style="color:#2E7D32;">' + htmlEscape(label) + '</strong></p>');
 
 			for (const step of steps) {
@@ -221,8 +274,8 @@ export function buildExportHtml(text: string, title?: string, source?: string): 
 			continue;
 		}
 
-		if (/^解析[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^解析([：:])(.*)/);
+		if (/^(?:\*\*)?解析(?:\*\*)?[：:]/.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
 			const label = match ? "解析" + (match[1] || "：") : "解析：";
 			const content = match ? (match[2] || "").trim() : "";
 			const contentLines = splitSemantic(content);

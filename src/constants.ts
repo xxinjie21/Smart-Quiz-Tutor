@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	countEssay: 2,
 	questionFolder: "题目",
 	wrongBookFolder: "错题",
+	convertedMdFolder: "md文件",
 	excludeFolders: ".trash, 模板, templates",
 	autoSave: true,
 	lastTags: "",
@@ -30,9 +31,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	questionKnowledgeFolder: "题目/知识点",
 	noteKnowledgeFolder: "笔记/知识点",
 	wrongKnowledgeFolder: "错题/知识点",
-	customTools: [
-		{ label: "Word/Excel转Markdown", url: "https://www.word2md.net/zh" },
-	],
 };
 
 export const SYSTEM_TAGS = ["错题", "题目"];

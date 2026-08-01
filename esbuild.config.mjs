@@ -37,7 +37,6 @@ const context = await esbuild.context({
 		name: 'drop-browser-code',
 		setup(build) {
 			build.onLoad({ filter: /jszip|immediate|setimmediate/ }, (args) => {
-				const { readFileSync } = require('fs');
 				let code = readFileSync(args.path, 'utf8');
 				code = code.replace(/typeof\s+window\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
 				code = code.replace(/typeof\s+document\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
@@ -66,15 +65,16 @@ if (prod) {
 	// 1. Remove immediate library's browser async scheduler (uses o.document.createElement("script"))
 	//    Original: "document"in o&&"onreadystatechange"in o.document.createElement("script")?function(){var X=o.document.createElement("script");...}:function(){setTimeout(d,0)}
 	//    Replace entire ternary with just the setTimeout fallback
+	//    NOTE: [\s\S]{0,600} bounds the match so a far-away setTimeout fallback is not swallowed
 	code = code.replace(
-		/"document"\s*in\s*\w+\s*&&\s*"onreadystatechange"\s*in\s*\w+\.document\.createElement\("script"\)\??[\s\S]*?:\s*(function\s*\(\s*\)\s*\{\s*setTimeout\s*\(\s*\w+\s*,\s*0\s*\)\s*\})/g,
+		/"document"\s*in\s*\w+\s*&&\s*"onreadystatechange"\s*in\s*\w+\.document\.createElement\("script"\)\??[\s\S]{0,600}?:\s*(function\s*\(\s*\)\s*\{\s*setTimeout\s*\(\s*\w+\s*,\s*0\s*\)\s*\})/g,
 		'$1'
 	);
 
 	// 2. Remove setimmediate library's browser async scheduler (uses g.createElement("script"))
 	//    Pattern: g&&"onreadystatechange"in g.createElement("script")?(h=g.documentElement,function(N){var y=g.createElement("script");...}):function(N){setTimeout(_,0,N)}
 	code = code.replace(
-		/\w+\s*&&\s*"onreadystatechange"\s*in\s*\w+\.createElement\("script"\)\?[\s\S]*?:\s*(function\s*\(\s*(\w+)\s*\)\s*\{\s*setTimeout\s*\(\s*\w+\s*,\s*0\s*,\s*\2\s*\)\s*\})/g,
+		/\w+\s*&&\s*"onreadystatechange"\s*in\s*\w+\.createElement\("script"\)\?[\s\S]{0,600}?:\s*(function\s*\(\s*(\w+)\s*\)\s*\{\s*setTimeout\s*\(\s*\w+\s*,\s*0\s*,\s*\2\s*\)\s*\})/g,
 		'$1'
 	);
 

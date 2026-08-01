@@ -11,18 +11,18 @@ import {
 } from "../constants";
 import type { HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode } from "../types";
 import { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "../utils/frontmatter";
-import { isAbs, daysUntil, writeFileStr, readFileStr, deleteFileAbs, ensureFolder } from "../utils/fs-utils";
+import { isAbs, daysUntil, writeFileStr, readFileStr, deleteFileAbs, ensureFolder, listMdFilesRecursive, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS } from "../utils/fs-utils";
 import { safeName, cleanSourceText, estimateTokens, stripAnswersForExport } from "../utils/text";
+import { convertDocumentToText } from "../services/documentService";
 import { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate, todayStr, isDueForReview } from "../utils/review";
 import { parseQuestions } from "../utils/parse";
-import { extractKnowledgeTags } from "../utils/tags";
 import { debounce } from "../utils/debounce";
 import { buildFileTree } from "../utils/filetree";
-import { stripAnswerSummarySection, splitSemantic, splitAnswerContent, fixSequentialNumbers, normalizeExamContent } from "../utils/layout";
+import { stripAnswerSummarySection, splitAnswerContent, fixSequentialNumbers, normalizeExamContent } from "../utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "../utils/exporter";
 import { getElectronRemote } from "../utils/electron";
 import { chatLLM } from "../services/llmService";
-import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, buildExamFrontmatter } from "../services/questionService";
+import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, buildExamFrontmatter, mergeExamChunks } from "../services/questionService";
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 
 export class MainSidebarView extends ItemView {
@@ -38,6 +38,7 @@ export class MainSidebarView extends ItemView {
 	// File picker state
 	fpSelected: Set<string> = new Set();
 	fpAllFiles: TFile[] = [];
+	genPickerMode: "current" | "folder" = "current";
 
 	// Generate state
 	genSourceText = "";
@@ -52,6 +53,7 @@ export class MainSidebarView extends ItemView {
 	// Exam browser state
 	examFiles: TFile[] = [];
 	examSelected: Set<string> = new Set();
+	examMode: "current" | "folder" = "current";
 	examProcessing = false;
 	examStatusText = "";
 
@@ -169,14 +171,15 @@ export class MainSidebarView extends ItemView {
 			this.plugin.rootPath(this.plugin.settings.wrongBookFolder),
 			this.plugin.rootPath(this.plugin.settings.noteViewFolder),
 		];
+		const excludes = [this.plugin.rootPath(this.plugin.settings.questionKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.noteKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.wrongKnowledgeFolder)].filter(Boolean);
+		const exclPrefixes = excludes.map(p => (p.endsWith("/") ? p : p + "/"));
 		for (const folder of folders) {
 			if (!folder) continue;
 			try {
 				if (isAbs(folder)) {
 					if (!fs.existsSync(folder)) continue;
-					const files = fs.readdirSync(folder).filter((f: string) => f.endsWith(".md"));
-					for (const f of files) {
-						const fp = path.join(folder, f);
+					const files = listMdFilesRecursive(folder, excludes);
+					for (const fp of files) {
 						try {
 							const stat = fs.statSync(fp);
 							const day = new Date(stat.mtimeMs).toISOString().slice(0, 10);
@@ -184,14 +187,11 @@ export class MainSidebarView extends ItemView {
 						} catch { /* skip */ }
 					}
 				} else {
-					const folderObj = this.app.vault.getAbstractFileByPath(folder);
-					if (folderObj instanceof TFolder) {
-						for (const child of folderObj.children) {
-							if (child instanceof TFile && child.extension === "md") {
-								const day = new Date(child.stat.mtime).toISOString().slice(0, 10);
-								activity[day] = (activity[day] || 0) + 1;
-							}
-						}
+					const prefix = folder.endsWith("/") ? folder : folder + "/";
+					const files = this.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e)));
+					for (const child of files) {
+						const day = new Date(child.stat.mtime).toISOString().slice(0, 10);
+						activity[day] = (activity[day] || 0) + 1;
 					}
 				}
 			} catch { /* skip */ }
@@ -328,15 +328,16 @@ export class MainSidebarView extends ItemView {
 		actSection.createDiv({ text: "快捷操作", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 
 		const actions = [
-			{ label: "📝 当前文档生成题目", desc: "基于当前打开的文档", action: () => this.openCurrentFileGenerate() },
-			{ label: "📂 选择文件生成题目", desc: "从知识库选择文件", action: () => { this.homeView = "filePicker"; void this.renderHomeTab(); } },
+			{ label: "📝 选择文件生成题目", desc: "让AI根据文档内容创作新题目存入题库", action: () => this.openGeneratePicker() },
 			{ label: "🎯 薄弱点生成题目", desc: "针对薄弱知识点", badge: stats.weakCount > 0 ? String(stats.weakCount) : undefined, action: async () => { await this.generateFromWeakPoints(); } },
-			{ label: "📋 AI识别试卷", desc: "从文档中AI提取题目并答题", action: () => { this.homeView = "examBrowser"; void this.renderHomeTab(); } },
-			{ label: "🏷️ AI添加标签", desc: "AI识别知识点并写入frontmatter，用于知识图谱", action: () => { this.taggerMode = "current"; this.fpSelected.clear(); this.homeView = "tagger"; void this.renderHomeTab(); } },
+			{ label: "📋 AI识别试卷", desc: "提取文档中已有题目，保存后直接答题", action: () => { this.homeView = "examBrowser"; void this.renderHomeTab(); } },
+			{ label: "🏷️ AI添加标签", desc: "AI识别知识点并写入frontmatter，用于知识图谱", action: () => { this.taggerMode = "current"; this.fpSelected.clear(); this.fpAllFiles = []; this.homeView = "tagger"; void this.renderHomeTab(); } },
 		];
 		for (const act of actions) {
 			const row = el.createDiv({ cls: "qg-action-row" });
-			row.createSpan({ text: act.label, cls: "qg-action-label" });
+			const rowInfo = row.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
+			rowInfo.createDiv({ text: act.label, cls: "qg-action-label" });
+			if (act.desc) rowInfo.createDiv({ text: act.desc, cls: "qg-action-desc" });
 			if (act.badge) row.createSpan({ text: act.badge, cls: "qg-badge" });
 			row.addEventListener("click", () => { void act.action(); });
 		}
@@ -355,32 +356,36 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const toolsSection = el.createDiv({ attr: { style: "margin-top:10px;" } });
-		toolsSection.createDiv({ text: "实用工具", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
-		for (const tool of this.plugin.settings.customTools) {
-			const toolRow = toolsSection.createDiv({ cls: "qg-action-row" });
-			toolRow.createSpan({ text: "🔗 " + tool.label, cls: "qg-action-label" });
-			toolRow.createSpan({ text: "外部", attr: { style: "font-size:14px;color:var(--text-muted);padding:1px 6px;border-radius:3px;border:1px solid var(--background-modifier-border);margin-left:4px;" } });
-			toolRow.addEventListener("click", () => { window.open(tool.url, "_blank"); });
-		}
+		toolsSection.createDiv({ text: "数据维护", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:0.5px;" } });
+		const rebuildRow = toolsSection.createDiv({ cls: "qg-action-row" });
+		const rebuildInfo = rebuildRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
+		rebuildInfo.createDiv({ text: "🔄 重建知识点索引", cls: "qg-action-label" });
+		rebuildInfo.createDiv({ text: "扫描各文件夹的标签，重新生成关联的知识点索引文件", cls: "qg-action-desc" });
+		rebuildRow.addEventListener("click", () => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); })(); });
+		const cacheRow = toolsSection.createDiv({ cls: "qg-action-row" });
+		const cacheInfo = cacheRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
+		cacheInfo.createDiv({ text: "🧹 清除缓存", cls: "qg-action-label" });
+		cacheInfo.createDiv({ text: "清空内存中的错题缓存，下次访问自动重新读取", cls: "qg-action-desc" });
+		cacheRow.addEventListener("click", () => { this.plugin.invalidateCache(); new Notice("缓存已清除"); });
 	}
 
 	// ===================== QUESTIONS TAB =====================
 	async listQuestionFiles(folder: string): Promise<TFile[]> {
+		const excludes = [this.plugin.rootPath(this.plugin.settings.questionKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.noteKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.wrongKnowledgeFolder)].filter(Boolean);
 		if (isAbs(folder)) {
 			try {
 				if (!fs.existsSync(folder)) return [];
-				const files = fs.readdirSync(folder).filter((f: string) => f.endsWith(".md"));
-				return files.map((f: string) => {
-					const fp = path.join(folder, f);
+				const files = listMdFilesRecursive(folder, excludes);
+				return files.map((fp: string) => {
 					const stat = fs.statSync(fp);
-					return { name: f, path: fp, basename: f.replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
+					return { name: path.basename(fp), path: fp, basename: path.basename(fp).replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
 				}).sort((a: TFile, b: TFile) => (b.stat.mtime || 0) - (a.stat.mtime || 0));
 			} catch { return []; }
 		}
 		try {
-			const tfolder = this.app.vault.getAbstractFileByPath(folder);
-			if (!tfolder || !(tfolder instanceof TFolder)) return [];
-			return (tfolder.children as TFile[]).filter(f => f instanceof TFile && f.name.endsWith(".md")).sort((a, b) => (b.stat.mtime || 0) - (a.stat.mtime || 0));
+			const prefix = folder.endsWith("/") ? folder : folder + "/";
+			const exclPrefixes = excludes.map(p => (p.endsWith("/") ? p : p + "/"));
+			return this.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e))).sort((a, b) => (b.stat.mtime || 0) - (a.stat.mtime || 0));
 		} catch { return []; }
 	}
 
@@ -767,15 +772,16 @@ export class MainSidebarView extends ItemView {
 			const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			b.addEventListener("click", cb);
 		};
-		toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); this.fpRenderTree(listEl, searchInput, infoEl); });
-		toolBtn("取消全选", () => { this.fpSelected.clear(); this.fpRenderTree(listEl, searchInput, infoEl); });
+		toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+		toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
 
 		const listEl = el.createDiv({ attr: { style: "max-height:450px;overflow-y:auto;" } });
-		searchInput.addEventListener("input", debounce(() => this.fpRenderTree(listEl, searchInput, infoEl), SEARCH_DEBOUNCE_MS));
-		this.fpRenderTree(listEl, searchInput, infoEl);
-
 		const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-		const confirmBtn = btnRow.createEl("button", { text: "创建笔记 (" + this.fpSelected.size + "个)", attr: { class: "mod-cta", style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:19px;" } });
+		const confirmBtn = btnRow.createEl("button", { text: "创建笔记 (0个)", attr: { class: "mod-cta", style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:19px;" } });
+		const updateConfirm = () => { confirmBtn.setText("创建笔记 (" + this.fpSelected.size + "个)"); };
+		const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm); updateConfirm(); };
+		searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
+		rerender();
 		confirmBtn.addEventListener("click", () => {
 			void (async () => {
 				const chosen = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
@@ -1308,6 +1314,7 @@ export class MainSidebarView extends ItemView {
 		textInput(fieldRow("题目文件夹"), s.questionFolder, v => { s.questionFolder = v; });
 		textInput(fieldRow("错题文件夹"), s.wrongBookFolder, v => { s.wrongBookFolder = v; });
 		textInput(fieldRow("笔记文件夹"), s.noteViewFolder, v => { s.noteViewFolder = v; }, "笔记");
+		textInput(fieldRow("转换md文件夹"), s.convertedMdFolder, v => { s.convertedMdFolder = v; }, "md文件");
 		textInput(fieldRow("AI识别文件夹"), s.extractedExamFolder, v => { s.extractedExamFolder = v; });
 		textInput(fieldRow("排除文件夹"), s.excludeFolders, v => { s.excludeFolders = v; });
 		const asRow = fieldRow("");
@@ -1426,99 +1433,115 @@ export class MainSidebarView extends ItemView {
 		}
 		sortSel.addEventListener("change", () => { s.sortWrongBy = sortSel.value as "date" | "tag" | "review"; void this.plugin.saveSettings(); });
 
-		section("实用工具");
-		el.createDiv({ text: "首页「实用工具」区域的外部链接", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
-		const toolsListEl = el.createDiv();
-		const renderToolsList = () => {
-			toolsListEl.empty();
-			s.customTools.forEach((tool, idx) => {
-				const row = toolsListEl.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:6px;align-items:center;" } });
-				const nameInp = row.createEl("input", { attr: { type: "text", value: tool.label, style: "width:120px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:17px;", placeholder: "名称" } });
-				nameInp.addEventListener("change", () => { s.customTools[idx]!.label = nameInp.value; void this.plugin.saveSettings(); });
-				const urlInp = row.createEl("input", { attr: { type: "text", value: tool.url, style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:17px;", placeholder: "https://..." } });
-				urlInp.addEventListener("change", () => { s.customTools[idx]!.url = urlInp.value; void this.plugin.saveSettings(); });
-				const delBtn = row.createEl("button", { text: "✕", attr: { style: "padding:4px 7px;border-radius:3px;cursor:pointer;font-size:15px;border:none;background:var(--background-secondary);color:var(--text-muted);" } });
-				delBtn.addEventListener("click", () => { s.customTools.splice(idx, 1); void this.plugin.saveSettings(); renderToolsList(); });
-			});
-		};
-		renderToolsList();
-		const addToolBtn = el.createEl("button", { text: "+ 添加", attr: { style: "padding:4px 12px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);margin-top:4px;" } });
-		addToolBtn.addEventListener("click", () => { s.customTools.push({ label: "", url: "" }); void this.plugin.saveSettings(); renderToolsList(); });
-
-		section("数据管理");
-		const dataBtnRow = el.createDiv({ attr: { style: "display:flex;gap:8px;flex-wrap:wrap;" } });
-		const dataBtn = (label: string, cb: () => void) => {
-			const b = dataBtnRow.createEl("button", { text: label, attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-			b.addEventListener("click", cb);
-		};
-		dataBtn("重建知识点索引", () => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); })(); });
-		dataBtn("清除缓存", () => { this.plugin.invalidateCache(); new Notice("缓存已清除"); });
-		el.createDiv({ text: "重建知识点索引：扫描题目/笔记/错题文件夹中的标签，重新生成知识点文件夹中的关联索引文件。手动修改标签后可点击。", attr: { style: "color:var(--text-muted);font-size:16px;margin-top:6px;line-height:1.5;" } });
-		el.createDiv({ text: "清除缓存：清空内存中的错题列表缓存，下次访问时重新从文件读取。一般无需手动操作。", attr: { style: "color:var(--text-muted);font-size:16px;margin-top:2px;line-height:1.5;" } });
 		window.requestAnimationFrame(() => { el.scrollTop = savedScrollTop; });
 	}
 
-	// ===================== FILE PICKER (inline) =====================
+	// ===================== FILE PICKER (unified, matches exam browser) =====================
 	renderFilePicker() {
 		if (!this.innerContentEl) return;
 		const el = this.innerContentEl;
 		el.empty();
 
 		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { this.homeView = "default"; void this.renderHomeTab(); });
-		el.createDiv({ text: "选择题目文档", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:8px;" } });
+		backBtn.addEventListener("click", () => { this.fpSelected.clear(); this.homeView = "default"; void this.renderHomeTab(); });
 
-		const excludeList = this.buildExcludeList();
-		this.fpAllFiles = this.app.vault.getFiles().filter(f => {
-			if (f.extension !== "md") return false;
-			const lowerPath = f.path.toLowerCase();
-			for (const ex of excludeList) {
-				if (lowerPath.includes(ex.toLowerCase() + "/") || lowerPath.startsWith(ex.toLowerCase())) return false;
+		el.createDiv({ text: "生成题目", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: "选择vault中的文档，AI根据内容生成各类题目，生成后保存到题库", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
+
+		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
+		const modes: { key: "current" | "folder"; label: string }[] = [
+			{ key: "current", label: "当前文件" },
+			{ key: "folder", label: "从文件夹选择" },
+		];
+		for (const m of modes) {
+			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.genPickerMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
+			btn.addEventListener("click", () => { this.genPickerMode = m.key; this.fpSelected.clear(); this.renderFilePicker(); });
+		}
+
+		if (this.genPickerMode === "current") {
+			const activeFile = this.app.workspace.getActiveFile();
+			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
+			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
+				el.createDiv({ text: "请先打开一个文档（md/txt/rtf/docx/pdf/图片）", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+			} else {
+				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
+				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);" } });
+				const processBtn = el.createEl("button", { text: "📝 基于当前文件生成题目", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
+				processBtn.addEventListener("click", () => { void this.generateFromCurrentFile(); });
 			}
-			return true;
-		});
+		} else {
+			this.loadPickerFiles();
 
-		const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:8px;" } });
-		infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 " + this.fpSelected.size + " 个" + (excludeList.length > 0 ? "（已排除: " + excludeList.join(", ") + "）" : ""));
+			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
+			infoEl.setText(this.selectInfoText(this.fpAllFiles, this.fpSelected));
 
-		const searchDiv = el.createDiv({ attr: { style: "margin-bottom:8px;" } });
-		const searchInput = searchDiv.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
+			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
-		const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
-		const toolBtn = (label: string, cb: () => void) => {
-			const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-			b.addEventListener("click", cb);
-		};
-		toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); this.fpRenderTree(listEl, searchInput, infoEl); });
-		toolBtn("取消全选", () => { this.fpSelected.clear(); this.fpRenderTree(listEl, searchInput, infoEl); });
+			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
+			const toolBtn = (label: string, cb: () => void) => {
+				const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+				b.addEventListener("click", cb);
+			};
 
-		const listEl = el.createDiv({ attr: { style: "max-height:450px;overflow-y:auto;" } });
-		searchInput.addEventListener("input", debounce(() => this.fpRenderTree(listEl, searchInput, infoEl), SEARCH_DEBOUNCE_MS));
-		this.fpRenderTree(listEl, searchInput, infoEl);
-
-		const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-		const confirmBtn = btnRow.createEl("button", { text: "确认选择 (" + this.fpSelected.size + "个)", attr: { class: "mod-cta", style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:19px;" } });
-		confirmBtn.addEventListener("click", () => {
-			void (async () => {
-				const chosen = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
-				if (chosen.length === 0) { new Notice("请至少选择一个文件"); return; }
-				let combined = "";
-				const paths: string[] = [];
-				for (const f of chosen) { combined += "\n\n---\n\n" + await this.app.vault.read(f); paths.push(f.path); }
-				this.startGenerate(combined.trim(), chosen.length + "个文档", paths.join(","));
-			})();
-		});
+			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
+			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
+			const confirmBtn = btnRow.createEl("button", { text: "📝 生成题目（0个）", attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+			confirmBtn.addEventListener("click", () => {
+				if (this.fpSelected.size === 0) { new Notice("请至少选择一个文件"); return; }
+				void this.generateFromSelected();
+			});
+			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); rerender(); });
+			const updateConfirm = () => {
+				const size = this.fpSelected.size;
+				confirmBtn.setText("📝 生成题目（" + size + "个）");
+				confirmBtn.style.opacity = size === 0 ? "0.5" : "1";
+				confirmBtn.style.pointerEvents = size === 0 ? "none" : "auto";
+			};
+			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm); updateConfirm(); };
+			toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+			toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
+			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
+			rerender();
+		}
 	}
 
-	fpRenderTree(listEl: HTMLDivElement, searchInput: HTMLInputElement, infoEl: HTMLElement) {
+	async generateFromCurrentFile() {
+		const file = this.app.workspace.getActiveFile();
+		const ext = file ? file.extension.toLowerCase() : "";
+		if (!file || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice("请打开一个支持的文档（md/txt/rtf/docx/PDF/图片）"); return; }
+		const text = await this.examSourceToText(file);
+		if (!text || text.trim().length === 0) { new Notice("未能读取文件内容"); return; }
+		this.startGenerate(text, file.name, file.path);
+	}
+
+	async generateFromSelected() {
+		const chosen = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
+		if (chosen.length === 0) return;
+		let combined = "";
+		const paths: string[] = [];
+		for (const f of chosen) {
+			const text = await this.examSourceToText(f);
+			if (text && text.trim().length > 0) { combined += "\n\n---\n\n" + text; paths.push(f.path); }
+		}
+		if (paths.length === 0) { new Notice("所选文件均无法读取内容"); return; }
+		this.startGenerate(combined.trim(), paths.length + "个文档", paths.join(","));
+	}
+
+	selectInfoText(files: TFile[], selected: Set<string>): string {
+		return "共 " + files.length + " 个文档，已选 " + selected.size + " 个";
+	}
+
+	renderSelectTree(listEl: HTMLDivElement, searchInput: HTMLInputElement, infoEl: HTMLElement, files: TFile[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void) {
 		listEl.empty();
 		const query = searchInput.value.toLowerCase();
-		const filtered = query ? this.fpAllFiles.filter(f => f.path.toLowerCase().includes(query) || f.basename.toLowerCase().includes(query)) : this.fpAllFiles;
+		const filtered = query ? files.filter(f => f.path.toLowerCase().includes(query) || f.basename.toLowerCase().includes(query)) : files;
 		const tree = buildFileTree(filtered);
-		this.fpRenderNode(listEl, tree, 0, infoEl);
+		this.renderSelectNode(listEl, tree, 0, infoEl, files, selected, onChanged, onSelectChange);
 	}
 
-	fpRenderNode(container: HTMLDivElement, node: TreeNode, depth: number, infoEl: HTMLElement) {
+	renderSelectNode(container: HTMLDivElement, node: TreeNode, depth: number, infoEl: HTMLElement, files: TFile[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void) {
 		const sorted = [...node.children].sort((a, b) => {
 			if (a.isFolder && !b.isFolder) return -1;
 			if (!a.isFolder && b.isFolder) return 1;
@@ -1529,14 +1552,15 @@ export class MainSidebarView extends ItemView {
 				const folderEl = container.createDiv({ attr: { style: "margin-left:" + (depth * 16) + "px;" } });
 				const folderRow = folderEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:4px;padding:3px 4px;cursor:pointer;border-radius:4px;font-weight:bold;font-size:19px;" } });
 				const arrow = folderRow.createSpan({ text: "▸", attr: { style: "font-size:17px;min-width:14px;color:var(--text-muted);" } });
-				const folderFiles = this.fpGetFolderFiles(child);
+				const folderFiles = this.selectFolderFiles(child);
 				const folderCb = folderRow.createEl("input", { attr: { type: "checkbox" } });
-				folderCb.checked = folderFiles.length > 0 && folderFiles.every(f => this.fpSelected.has(f.path));
-				folderCb.indeterminate = folderFiles.some(f => this.fpSelected.has(f.path)) && !folderCb.checked;
+				folderCb.checked = folderFiles.length > 0 && folderFiles.every(f => selected.has(f.path));
+				folderCb.indeterminate = folderFiles.some(f => selected.has(f.path)) && !folderCb.checked;
 				folderCb.addEventListener("change", () => {
-					if (folderCb.checked) folderFiles.forEach(f => this.fpSelected.add(f.path));
-					else folderFiles.forEach(f => this.fpSelected.delete(f.path));
-					this.fpRenderTree(container.parentElement as HTMLDivElement, container.parentElement!.previousElementSibling!.querySelector("input") as HTMLInputElement, infoEl);
+					if (folderCb.checked) folderFiles.forEach(f => selected.add(f.path));
+					else folderFiles.forEach(f => selected.delete(f.path));
+					onChanged();
+					if (onSelectChange) onSelectChange();
 				});
 				folderRow.createSpan({ text: child.name + " (" + child.children.length + ")" });
 				const childContainer = folderEl.createDiv({ attr: { style: "display:none;" } });
@@ -1547,30 +1571,38 @@ export class MainSidebarView extends ItemView {
 					childContainer.style.display = expanded ? "block" : "none";
 					arrow.setText(expanded ? "▾" : "▸");
 				});
-				this.fpRenderNode(childContainer, child, depth + 1, infoEl);
+				this.renderSelectNode(childContainer, child, depth + 1, infoEl, files, selected, onChanged);
 			} else {
 				const row = container.createDiv({ attr: { style: "margin-left:" + (depth * 16) + "px;padding:3px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;border-radius:4px;font-size:19px;" } });
 				const cb = row.createEl("input", { attr: { type: "checkbox" } });
-				cb.checked = this.fpSelected.has(child.path);
-				cb.addEventListener("change", () => { cb.checked ? this.fpSelected.add(child.path) : this.fpSelected.delete(child.path); infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 " + this.fpSelected.size + " 个"); });
+				cb.checked = selected.has(child.path);
+				const notifySelect = onSelectChange ?? onChanged;
+				cb.addEventListener("change", () => {
+					cb.checked ? selected.add(child.path) : selected.delete(child.path);
+					infoEl.setText(this.selectInfoText(files, selected));
+					notifySelect();
+				});
 				row.createSpan({ text: child.name, attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
 				if (child.file) {
 					row.createSpan({ text: Math.round(child.file.stat.size / 1024) + "KB", attr: { style: "color:var(--text-muted);font-size:16px;flex-shrink:0;" } });
+					const d = new Date(child.file.stat.mtime);
+					row.createSpan({ text: (d.getMonth() + 1) + "/" + d.getDate(), attr: { style: "color:var(--text-muted);font-size:17px;flex-shrink:0;" } });
 				}
 				row.addEventListener("click", (e) => {
 					if ((e.target as HTMLElement).tagName === "INPUT") return;
 					cb.checked = !cb.checked;
-					cb.checked ? this.fpSelected.add(child.path) : this.fpSelected.delete(child.path);
-					infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 " + this.fpSelected.size + " 个");
+					cb.checked ? selected.add(child.path) : selected.delete(child.path);
+					infoEl.setText(this.selectInfoText(files, selected));
+					notifySelect();
 				});
 			}
 		}
 	}
 
-	fpGetFolderFiles(node: TreeNode): TFile[] {
+	selectFolderFiles(node: TreeNode): TFile[] {
 		const files: TFile[] = [];
 		for (const c of node.children) {
-			if (c.isFolder) files.push(...this.fpGetFolderFiles(c));
+			if (c.isFolder) files.push(...this.selectFolderFiles(c));
 			else if (c.file) files.push(c.file);
 		}
 		return files;
@@ -1586,7 +1618,7 @@ export class MainSidebarView extends ItemView {
 		backBtn.addEventListener("click", () => { this.examSelected.clear(); this.examStatusText = ""; this.homeView = "default"; void this.renderHomeTab(); });
 
 		el.createDiv({ text: "AI 识别试卷", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "选择vault中的文档，AI自动识别并提取其中的题目，保存后进入答题模式", attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:12px;" } });
+		el.createDiv({ text: "选择vault中的文档，AI自动识别并提取其中的题目，保存后进入答题模式", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
 
 		if (this.examProcessing) {
 			const statusEl = el.createDiv({ attr: { style: "text-align:center;padding:24px 0;" } });
@@ -1597,97 +1629,65 @@ export class MainSidebarView extends ItemView {
 
 		if (this.examFiles.length === 0) this.loadExamFiles();
 
-		const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
-		infoEl.setText("共 " + this.examFiles.length + " 个文档，已选 " + this.examSelected.size + " 个");
+		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
+		const modes: { key: "current" | "folder"; label: string }[] = [
+			{ key: "current", label: "当前文件" },
+			{ key: "folder", label: "从文件夹选择" },
+		];
+		for (const m of modes) {
+			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.examMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
+			btn.addEventListener("click", () => { this.examMode = m.key; this.examSelected.clear(); void this.renderExamBrowser(); });
+		}
 
-		const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
-		const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
+		if (this.examMode === "current") {
+			const activeFile = this.app.workspace.getActiveFile();
+			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
+			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
+				el.createDiv({ text: "请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+			} else {
+				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
+				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);" } });
+				const processBtn = el.createEl("button", { text: "📄 识别当前文件", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
+				processBtn.addEventListener("click", () => { void this.openCurrentFileExtract(); });
+			}
+		} else {
+			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
+			infoEl.setText(this.selectInfoText(this.examFiles, this.examSelected));
 
-		const renderTree = () => {
-			listEl.empty();
-			const query = searchInput.value.toLowerCase();
-			const filtered = query ? this.examFiles.filter(f => f.path.toLowerCase().includes(query) || f.basename.toLowerCase().includes(query)) : this.examFiles;
-			const tree = buildFileTree(filtered);
-			this.examRenderNode(listEl, tree, 0, infoEl);
-		};
-		searchInput.addEventListener("input", debounce(renderTree, SEARCH_DEBOUNCE_MS));
-		renderTree();
+			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
+
+			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
+			const toolBtn = (label: string, cb: () => void) => {
+				const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+				b.addEventListener("click", cb);
+			};
+
+			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
+			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
+			const procBtn = btnRow.createEl("button", { text: "🔍 AI 识别题目（0个）", attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+			procBtn.addEventListener("click", () => {
+				if (this.examSelected.size === 0) { new Notice("请至少选择一个文件"); return; }
+				void this.extractFromExamSelected();
+			});
+			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+			clearBtn.addEventListener("click", () => { this.examSelected.clear(); rerender(); });
+			const updateConfirm = () => {
+				const size = this.examSelected.size;
+				procBtn.setText("🔍 AI 识别题目（" + size + "个）");
+				procBtn.style.opacity = size === 0 ? "0.5" : "1";
+				procBtn.style.pointerEvents = size === 0 ? "none" : "auto";
+			};
+			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.examFiles, this.examSelected, rerender, updateConfirm); updateConfirm(); };
+			toolBtn("全选", () => { this.examFiles.forEach(f => this.examSelected.add(f.path)); rerender(); });
+			toolBtn("取消全选", () => { this.examSelected.clear(); rerender(); });
+			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
+			rerender();
+		}
 
 		if (this.examStatusText) {
-			el.createDiv({ text: this.examStatusText, attr: { style: "color:var(--color-orange);font-size:18px;margin-top:8px;" } });
+			el.createDiv({ text: this.examStatusText, attr: { style: "margin-top:10px;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);font-size:17px;color:var(--text-muted);" } });
 		}
-
-		const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-		const extractBtn = btnRow.createEl("button", { text: "🔍 AI 识别题目 (" + this.examSelected.size + "个)", attr: { class: "mod-cta", style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;" } });
-		extractBtn.addEventListener("click", () => {
-			if (this.examSelected.size === 0) { new Notice("请至少选择一个文件"); return; }
-			void this.extractFromExamSelected();
-		});
-		const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-		clearBtn.addEventListener("click", () => { this.examSelected.clear(); renderTree(); infoEl.setText("共 " + this.examFiles.length + " 个文档，已选 0 个"); });
-	}
-
-	examRenderNode(container: HTMLDivElement, node: TreeNode, depth: number, infoEl: HTMLElement) {
-		const sorted = [...node.children].sort((a, b) => {
-			if (a.isFolder && !b.isFolder) return -1;
-			if (!a.isFolder && b.isFolder) return 1;
-			return a.name.localeCompare(b.name);
-		});
-		for (const child of sorted) {
-			if (child.isFolder) {
-				const folderEl = container.createDiv({ attr: { style: "margin-left:" + (depth * 16) + "px;" } });
-				const folderRow = folderEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:4px;padding:3px 4px;cursor:pointer;border-radius:4px;font-weight:bold;font-size:19px;" } });
-				const arrow = folderRow.createSpan({ text: "▸", attr: { style: "font-size:17px;min-width:14px;color:var(--text-muted);" } });
-				const folderFiles = this.examGetFolderFiles(child);
-				const folderCb = folderRow.createEl("input", { attr: { type: "checkbox" } });
-				folderCb.checked = folderFiles.length > 0 && folderFiles.every(f => this.examSelected.has(f.path));
-				folderCb.indeterminate = folderFiles.some(f => this.examSelected.has(f.path)) && !folderCb.checked;
-				folderCb.addEventListener("change", () => {
-					if (folderCb.checked) folderFiles.forEach(f => this.examSelected.add(f.path));
-					else folderFiles.forEach(f => this.examSelected.delete(f.path));
-					void this.renderExamBrowser();
-				});
-				folderRow.createSpan({ text: child.name + " (" + child.children.length + ")" });
-				const childContainer = folderEl.createDiv({ attr: { style: "display:none;" } });
-				let expanded = false;
-				folderRow.addEventListener("click", (e) => {
-					if ((e.target as HTMLElement).tagName === "INPUT") return;
-					expanded = !expanded;
-					childContainer.style.display = expanded ? "block" : "none";
-					arrow.setText(expanded ? "▾" : "▸");
-				});
-				this.examRenderNode(childContainer, child, depth + 1, infoEl);
-			} else {
-				const row = container.createDiv({ attr: { style: "margin-left:" + (depth * 16) + "px;padding:3px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;border-radius:4px;font-size:19px;" } });
-				const cb = row.createEl("input", { attr: { type: "checkbox" } });
-				cb.checked = this.examSelected.has(child.path);
-				cb.addEventListener("change", () => {
-					cb.checked ? this.examSelected.add(child.path) : this.examSelected.delete(child.path);
-					infoEl.setText("共 " + this.examFiles.length + " 个文档，已选 " + this.examSelected.size + " 个");
-				});
-				row.createSpan({ text: child.name, attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
-				if (child.file) {
-					row.createSpan({ text: Math.round(child.file.stat.size / 1024) + "KB", attr: { style: "color:var(--text-muted);font-size:16px;flex-shrink:0;" } });
-					const d = new Date(child.file.stat.mtime);
-					row.createSpan({ text: (d.getMonth() + 1) + "/" + d.getDate(), attr: { style: "color:var(--text-muted);font-size:17px;flex-shrink:0;" } });
-				}
-				row.addEventListener("click", (e) => {
-					if ((e.target as HTMLElement).tagName === "INPUT") return;
-					cb.checked = !cb.checked;
-					cb.checked ? this.examSelected.add(child.path) : this.examSelected.delete(child.path);
-					infoEl.setText("共 " + this.examFiles.length + " 个文档，已选 " + this.examSelected.size + " 个");
-				});
-			}
-		}
-	}
-
-	examGetFolderFiles(node: TreeNode): TFile[] {
-		const files: TFile[] = [];
-		for (const c of node.children) {
-			if (c.isFolder) files.push(...this.examGetFolderFiles(c));
-			else if (c.file) files.push(c.file);
-		}
-		return files;
 	}
 
 	buildExcludeList(): string[] {
@@ -1697,16 +1697,31 @@ export class MainSidebarView extends ItemView {
 		return list;
 	}
 
-	loadExamFiles() {
+	loadSourceFiles(): TFile[] {
 		const excludeList = this.buildExcludeList();
-		this.examFiles = this.app.vault.getFiles().filter(f => {
-			if (f.extension !== "md") return false;
+		return this.app.vault.getFiles().filter(f => {
+			const ext = f.extension.toLowerCase();
+			if (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext)) return false;
 			const lowerPath = f.path.toLowerCase();
 			for (const ex of excludeList) {
 				if (lowerPath.includes(ex + "/") || lowerPath.startsWith(ex)) return false;
 			}
 			return true;
 		}).sort((a, b) => b.stat.mtime - a.stat.mtime);
+	}
+
+	loadExamFiles() { this.examFiles = this.loadSourceFiles(); }
+
+	loadPickerFiles() { this.fpAllFiles = this.loadSourceFiles(); }
+
+	loadTaggerFiles() {
+		const excludeList = this.buildExcludeList();
+		this.fpAllFiles = this.app.vault.getFiles().filter(f => {
+			if (f.extension !== "md") return false;
+			const lp = f.path.toLowerCase();
+			for (const ex of excludeList) { if (lp.includes(ex + "/") || lp.startsWith(ex)) return false; }
+			return true;
+		});
 	}
 
 	async extractFromExamSelected() {
@@ -1718,7 +1733,7 @@ export class MainSidebarView extends ItemView {
 		void this.renderExamBrowser();
 
 		const cfg = this.plugin.settings;
-		const saveFolder = cfg.extractedExamFolder || "题目/识别试卷";
+		const saveFolder = this.plugin.rootPath(cfg.extractedExamFolder || "题目/识别试卷");
 		await ensureFolder(this.app, saveFolder);
 		const savedPaths: string[] = [];
 		let totalQuestions = 0;
@@ -1730,40 +1745,47 @@ export class MainSidebarView extends ItemView {
 			void this.renderExamBrowser();
 
 			try {
-				const content = await this.app.vault.read(file);
+				const content = await this.examSourceToText(file);
 				if (!content || content.trim().length === 0) continue;
 
 				let allQuestionsText = "";
-				const chunks: string[] = [];
-				if (content.length <= MAX_EXAM_CHUNK_CHARS) {
-					chunks.push(content);
+				if (isImageFile(file.name)) {
+					allQuestionsText = content;
 				} else {
-					this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + "（内容较长，分" + Math.ceil(content.length / MAX_EXAM_CHUNK_CHARS) + "段识别）...";
-					void this.renderExamBrowser();
-					const overlap = EXAM_CHUNK_OVERLAP;
-					for (let start = 0; start < content.length; start += MAX_EXAM_CHUNK_CHARS - overlap) {
-						chunks.push(content.slice(start, start + MAX_EXAM_CHUNK_CHARS));
-						if (start + MAX_EXAM_CHUNK_CHARS >= content.length) break;
-					}
-				}
-
-				for (let ci = 0; ci < chunks.length; ci++) {
-					const chunk = chunks[ci]!;
-					if (chunks.length > 1) {
-						this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + " - 第" + (ci + 1) + "/" + chunks.length + "段...";
+					const chunks: string[] = [];
+					if (content.length <= MAX_EXAM_CHUNK_CHARS) {
+						chunks.push(content);
+					} else {
+						this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + "（内容较长，分" + Math.ceil(content.length / MAX_EXAM_CHUNK_CHARS) + "段识别）...";
 						void this.renderExamBrowser();
+						const overlap = EXAM_CHUNK_OVERLAP;
+						for (let start = 0; start < content.length; start += MAX_EXAM_CHUNK_CHARS - overlap) {
+							chunks.push(content.slice(start, start + MAX_EXAM_CHUNK_CHARS));
+							if (start + MAX_EXAM_CHUNK_CHARS >= content.length) break;
+						}
 					}
-					const prompt = buildExamExtractPrompt(chunk, ci + 1, chunks.length);
-					const full = await this.callAIWithPrompt(prompt);
-					if (full) allQuestionsText += "\n\n" + full;
+
+					for (let ci = 0; ci < chunks.length; ci++) {
+						const chunk = chunks[ci]!;
+						if (chunks.length > 1) {
+							this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + " - 第" + (ci + 1) + "/" + chunks.length + "段...";
+							void this.renderExamBrowser();
+						}
+						const prompt = buildExamExtractPrompt(chunk, ci + 1, chunks.length);
+						const full = await this.callAIWithPrompt(prompt);
+						if (full) allQuestionsText += "\n\n" + full;
+					}
 				}
 				if (!allQuestionsText.trim()) continue;
 
-				const questions = parseQuestions(allQuestionsText);
+				const mergedText = mergeExamChunks(allQuestionsText);
+
+				const questions = parseQuestions(mergedText);
 				if (questions.length === 0) continue;
 				totalQuestions += questions.length;
 
-				const { tags: aiTags, cleanText } = parseAITagsFromResult(allQuestionsText);
+				const { cleanText } = parseAITagsFromResult(mergedText);
+				const aiTags = await this.aiSuggestTags(mergedText);
 				const saveContent = buildExamFrontmatter(file.basename, aiTags) + normalizeExamContent(cleanText);
 				const safeName = file.basename.replace(/[<>:"/\\|?*]/g, "_");
 				const savePath = saveFolder + "/" + safeName + " - AI识别.md";
@@ -1815,18 +1837,83 @@ export class MainSidebarView extends ItemView {
 		this.startGenerate(normalizeExamContent(combined.trim()), savedPaths.length + "个识别试卷", paths.join(","));
 	}
 
-	async callAIWithPrompt(prompt: string): Promise<string> {
+	async callAIWithPrompt(prompt: string, images?: string[]): Promise<string> {
 		const cfg = this.plugin.settings;
 		const controller = new AbortController();
 		this.genAbortController = controller;
 		const timeoutId = window.setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
 		try {
-			return await chatLLM(cfg, prompt);
+			return await chatLLM(cfg, prompt, images && images.length > 0 ? { images } : undefined);
 		} finally {
 			window.clearTimeout(timeoutId);
 			this.genAbortController = null;
 		}
+	}
+
+	async readFileAsBase64(file: TFile): Promise<string> {
+		const buf = await this.app.vault.readBinary(file);
+		const bytes = new Uint8Array(buf);
+		let binary = "";
+		const chunkSize = 0x8000;
+		for (let i = 0; i < bytes.length; i += chunkSize) {
+			binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+		}
+		return btoa(binary);
+	}
+
+	async examSourceToText(file: TFile): Promise<string> {
+		let text = "";
+		if (isImageFile(file.name)) {
+			const b64 = await this.readFileAsBase64(file);
+			const prompt = "这是一张试卷图片。请仔细识别图片中的全部内容，提取其中所有题目。如果图片包含标题、题干、选项、答案、解析，请完整保留。\n\n【输出要求】\n严格按照下面的格式输出，不要输出其他内容：\n## 题型名称\n1. 题干\nA. 选项A\nB. 选项B\nC. 选项C\nD. 选项D\n答案：A\n解析：概述\n\n多要点答案用 (1)(2)(3) 分点。";
+			new Notice("图片识别：请确认当前模型支持多模态（视觉）能力");
+			text = await this.callAIWithPrompt(prompt, [b64]);
+		} else if (file.extension === "md") {
+			text = await this.app.vault.read(file);
+		} else if (isDocumentFile(file.name)) {
+			const absPath = await this.vaultFileToAbs(file);
+			if (!absPath) { new Notice("无法读取文件：" + file.name); return ""; }
+			text = await convertDocumentToText(absPath);
+		}
+		if (text) void this.saveConvertedMd(file, text);
+		return text;
+	}
+
+	async saveConvertedMd(file: TFile, text: string) {
+		const folderSetting = this.plugin.settings.convertedMdFolder;
+		if (!folderSetting || file.extension.toLowerCase() === "md") return;
+		if (!text || text.trim().length === 0) return;
+		const folder = this.plugin.rootPath(folderSetting);
+		await ensureFolder(this.app, folder);
+		const safeBase = file.basename.replace(/[<>:"/\\|?*]/g, "_");
+		if (isAbs(folder)) {
+			writeFileStr(folder + "\\" + safeBase + ".md", text);
+		} else {
+			const savePath = folder + "/" + safeBase + ".md";
+			try { await this.app.vault.create(savePath, text); }
+			catch { await this.app.vault.create(folder + "/" + safeBase + "_" + Date.now() + ".md", text); }
+		}
+	}
+
+	async aiSuggestTags(text: string): Promise<string[]> {
+		try {
+			const existingTags = await this.plugin.loadExistingKnowledgeTags();
+			const prompt = buildTaggingPrompt(text, existingTags);
+			const full = await this.callAIWithPrompt(prompt);
+			return parseTaggedResult(full || "");
+		} catch (err) {
+			console.error("[question-generator] AI知识点标签识别失败:", err);
+			return [];
+		}
+	}
+
+	async vaultFileToAbs(file: TFile): Promise<string | null> {
+		try {
+			const adapter = this.app.vault.adapter as { getFullPath?: (p: string) => string };
+			if (typeof adapter.getFullPath === "function") return adapter.getFullPath(file.path);
+		} catch { /* empty */ }
+		return null;
 	}
 
 	// ===================== AI TAGGER (inline) =====================
@@ -1862,17 +1949,9 @@ export class MainSidebarView extends ItemView {
 				processBtn.addEventListener("click", () => { void this.runAITagging([activeFile]); });
 			}
 		} else {
-			if (this.fpAllFiles.length === 0) {
-				const excludeList = this.buildExcludeList();
-				this.fpAllFiles = this.app.vault.getFiles().filter(f => {
-					if (f.extension !== "md") return false;
-					const lp = f.path.toLowerCase();
-					for (const ex of excludeList) { if (lp.includes(ex.toLowerCase() + "/") || lp.startsWith(ex.toLowerCase())) return false; }
-					return true;
-				});
-			}
+			this.loadTaggerFiles();
 			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
-			infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 " + this.fpSelected.size + " 个");
+			infoEl.setText(this.selectInfoText(this.fpAllFiles, this.fpSelected));
 
 			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
@@ -1881,21 +1960,28 @@ export class MainSidebarView extends ItemView {
 				const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 				b.addEventListener("click", cb);
 			};
-			toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); this.fpRenderTree(listEl, searchInput, infoEl); });
-			toolBtn("取消全选", () => { this.fpSelected.clear(); this.fpRenderTree(listEl, searchInput, infoEl); });
 
 			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
-			searchInput.addEventListener("input", debounce(() => this.fpRenderTree(listEl, searchInput, infoEl), SEARCH_DEBOUNCE_MS));
-			this.fpRenderTree(listEl, searchInput, infoEl);
-
 			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-			const procBtn = btnRow.createEl("button", { text: (this.taggerProcessing ? "处理中..." : "🤖 开始识别标签（" + this.fpSelected.size + "个）"), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" + (this.taggerProcessing || this.fpSelected.size === 0 ? "opacity:0.5;pointer-events:none;" : "") } });
+			const procBtn = btnRow.createEl("button", { text: (this.taggerProcessing ? "处理中..." : "🤖 开始识别标签（0个）"), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
 			procBtn.addEventListener("click", () => {
 				const files = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
 				void this.runAITagging(files);
 			});
 			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); this.fpRenderTree(listEl, searchInput, infoEl); infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 0 个"); });
+			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); rerender(); });
+			const updateConfirm = () => {
+				const size = this.fpSelected.size;
+				procBtn.setText(this.taggerProcessing ? "处理中..." : "🤖 开始识别标签（" + size + "个）");
+				const disabled = this.taggerProcessing || size === 0;
+				procBtn.style.opacity = disabled ? "0.5" : "1";
+				procBtn.style.pointerEvents = disabled ? "none" : "auto";
+			};
+			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm); updateConfirm(); };
+			toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+			toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
+			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
+			rerender();
 		}
 
 		if (this.taggerStatusText) {
@@ -2138,7 +2224,7 @@ export class MainSidebarView extends ItemView {
 		try {
 			await ensureFolder(this.app, this.plugin.rootPath(this.plugin.settings.questionFolder));
 			const dateStr = new Date().toISOString().slice(0, 10);
-			const autoTags = this.genAITags.length > 0 ? this.genAITags : extractKnowledgeTags(this.genFileName, this.genResultText);
+			const autoTags = await this.aiSuggestTags(this.genResultText);
 			const allTags = ["题目", ...this.genCurrentTags, ...autoTags.filter(t => !this.genCurrentTags.includes(t))];
 			const sourceLink = this.genFileName ? "[[" + this.genFileName + "]]" : "";
 			const qIvls = parseReviewIntervals(this.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS);
@@ -2276,7 +2362,9 @@ export class MainSidebarView extends ItemView {
 			headerRow.createSpan({ text: "第 " + q.number + " 题", attr: { style: "font-size:17px;color:var(--text-muted);" } });
 			if (!isGradable) headerRow.createSpan({ text: "(仅参考)", attr: { style: "font-size:16px;color:var(--text-faint);" } });
 
-			qEl.createDiv({ text: "**" + q.number + ".** " + q.text, attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:8px;" } });
+			const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:8px;" } });
+			qTextRow.createSpan({ text: q.number + ". ", attr: { style: "font-weight:700;" } });
+			qTextRow.createSpan({ text: q.text });
 
 			if (q.type === "single" || q.type === "judge") {
 				const optsEl = qEl.createDiv({ cls: "qg-opts-col" });
@@ -2366,7 +2454,9 @@ export class MainSidebarView extends ItemView {
 				qHeader.createSpan({ text: isCorrect ? "✓ 正确" : "✗ 错误", attr: { style: "font-size:17px;padding:2px 6px;border-radius:4px;font-weight:600;" + (isCorrect ? "background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);" : "background:color-mix(in srgb, var(--color-red) 15%, transparent);color:var(--color-red);") } });
 				qHeader.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;color:var(--text-muted);" } });
 
-				qEl.createDiv({ text: "**" + q.number + ".** " + q.text, attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
+				const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
+				qTextRow.createSpan({ text: q.number + ". ", attr: { style: "font-weight:700;" } });
+				qTextRow.createSpan({ text: q.text });
  
  				for (const opt of q.options) {
 					const isUserChoice = q.type === "multi" ? userAnswer.includes(opt.label) : opt.label === userAnswer;
@@ -2386,7 +2476,7 @@ export class MainSidebarView extends ItemView {
 				if (q.explanation) {
 					const expLabel = qEl.createDiv({ attr: { style: "margin-top:4px;" } });
 					expLabel.createDiv({ text: "考点解析", attr: { style: "font-size:18px;font-weight:700;color:#1565C0;margin-bottom:2px;" } });
-					const expLines = splitSemantic(q.explanation);
+					const expLines = splitAnswerContent(q.explanation);
 					for (const line of expLines) qEl.createDiv({ text: line, attr: { style: "font-size:17px;line-height:1.6;color:var(--text-muted);" } });
 				}
 			}
@@ -2403,7 +2493,9 @@ export class MainSidebarView extends ItemView {
 				wCb.addEventListener("change", () => { wCb.checked ? this.answerWrongChecked.add(q.number) : this.answerWrongChecked.delete(q.number); });
 				qHeader.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;padding:2px 6px;border-radius:4px;background:var(--interactive-accent);color:var(--text-on-accent);" } });
 
-				qEl.createDiv({ text: "**" + q.number + ".** " + q.text, attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
+				const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
+				qTextRow.createSpan({ text: q.number + ". ", attr: { style: "font-weight:700;" } });
+				qTextRow.createSpan({ text: q.text });
  				if (userAnswer) {
 					qEl.createDiv({ text: "你的答案：", attr: { style: "font-size:17px;color:var(--text-muted);margin-bottom:2px;" } });
 					qEl.createDiv({ text: userAnswer, attr: { style: "padding:6px 10px;border-radius:4px;background:var(--background-secondary);font-size:19px;line-height:1.7;white-space:pre-wrap;" } });
@@ -2417,7 +2509,7 @@ export class MainSidebarView extends ItemView {
 				if (q.explanation) {
 					const expEl = qEl.createDiv({ cls: "qg-exp-top" });
 					expEl.createDiv({ text: "考点解析", cls: "qg-exp-title" });
-					const expLines = splitSemantic(q.explanation);
+					const expLines = splitAnswerContent(q.explanation);
 					for (const line of expLines) expEl.createDiv({ text: line, cls: "qg-exp-line" });
 				}
 			}
@@ -2427,9 +2519,9 @@ export class MainSidebarView extends ItemView {
 			const wrongBtnRow = el.createDiv({ cls: "qg-mt10" });
 			const wrongBtn = wrongBtnRow.createEl("button", { text: "加入错题本", attr: { class: "mod-cta" }, cls: "qg-wrong-btn" });
 			const wrongArea = el.createDiv({ cls: "qg-wrong-area qg-hidden" });
-			const autoTags = extractKnowledgeTags(this.answerSourceName, this.answerQuestions.map(q => q.text).join("\n"));
+			const questionsText = this.answerQuestions.map(q => q.text).join("\n");
 			wrongArea.createDiv({ text: "知识点标签（可编辑）：", cls: "qg-label-text" });
-			const tagsInput = wrongArea.createEl("input", { attr: { type: "text", value: autoTags.join(", "), placeholder: "微积分, 导数", style: "width:100%;padding:6px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:6px;font-size:18px;" } });
+			const tagsInput = wrongArea.createEl("input", { attr: { type: "text", value: "", placeholder: "AI识别中，点击“加入错题本”后自动识别", style: "width:100%;padding:6px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:6px;font-size:18px;" } });
 			wrongArea.createDiv({ text: "备注：", attr: { style: "font-size:18px;margin-bottom:4px;" } });
 			const noteArea = wrongArea.createEl("textarea", { attr: { style: "width:100%;height:40px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;", placeholder: "例如：第3、7题做错了" } });
 			const confirmWrongBtn = wrongArea.createEl("button", { text: "确认加入", attr: { class: "mod-cta", style: "padding:5px 14px;border-radius:4px;cursor:pointer;font-size:18px;margin-top:4px;" } });
@@ -2442,7 +2534,17 @@ export class MainSidebarView extends ItemView {
 					wrongArea.classList.add("qg-hidden");
 				})();
 			});
-			wrongBtn.addEventListener("click", () => { wrongArea.classList.toggle("qg-hidden"); });
+			let tagsSuggested = false;
+			wrongBtn.addEventListener("click", () => {
+				wrongArea.classList.toggle("qg-hidden");
+				if (!tagsSuggested) {
+					tagsSuggested = true;
+					tagsInput.placeholder = "AI识别知识点中...";
+					void this.aiSuggestTags(questionsText).then(tags => {
+						if (tagsInput.value.trim() === "") tagsInput.value = tags.join(", ");
+					});
+				}
+			});
 		}
 
 		const homeBtn = el.createDiv({ cls: "qg-home-btn" });
@@ -2451,14 +2553,28 @@ export class MainSidebarView extends ItemView {
 	}
 
 	async answerSaveWrongToBook(wrongList: ParsedQuestion[], noteText: string) {
-		const typeLabels: Record<QuestionType, string> = { single: "单选", multi: "多选", judge: "判断", blank: "填空", essay: "简答" };
+		const typeLabels: Record<QuestionType, string> = { single: "单选题", multi: "多选题", judge: "判断题", blank: "填空题", essay: "简答题" };
+		const fmtPoints = (label: string, content: string): string => {
+			const lines = content.split("\n").map(s => s.trim()).filter(Boolean);
+			if (lines.length > 1 || /\(\d+\)/.test(content)) {
+				return label + "：\n" + lines.join("\n");
+			}
+			return label + "：" + content;
+		};
+		const groups: Partial<Record<QuestionType, ParsedQuestion[]>> = {};
+		for (const q of wrongList) (groups[q.type] ??= []).push(q);
 		let wrongText = "";
-		for (const q of wrongList) {
-			wrongText += q.number + ". [" + typeLabels[q.type] + "] " + q.text + "\n";
-			for (const opt of q.options) wrongText += opt.label + ". " + opt.text + "\n";
-			wrongText += "答案：" + q.answer + "\n";
-			if (q.explanation) wrongText += "解析：" + q.explanation + "\n";
-			wrongText += "\n";
+		let seq = 0;
+		for (const [type, questions] of Object.entries(groups) as [QuestionType, ParsedQuestion[]][]) {
+			wrongText += "## " + typeLabels[type] + "\n";
+			for (const q of questions) {
+				seq++;
+				wrongText += "**" + seq + ".** " + q.text + "\n";
+				for (const opt of q.options) wrongText += opt.label + ". " + opt.text + "\n";
+				wrongText += fmtPoints("答案", q.answer) + "\n";
+				if (q.explanation) wrongText += fmtPoints("解析", q.explanation) + "\n";
+				wrongText += "\n";
+			}
 		}
 		const tags = ["错题", ...this.answerCurrentTags];
 		const knowledgeLinks = buildKnowledgeLinks(tags);
@@ -2468,7 +2584,7 @@ export class MainSidebarView extends ItemView {
 			const sourceLink = this.answerSourceName ? "[[" + this.answerSourceName + "]]" : "";
 			const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
 			const fm = buildFM({ source: sourceLink, sourcePath: this.answerSourcePath, date: dateStr, tags, note: noteText || "答题模式加入（" + wrongList.length + "题错误）", nextReview: tomorrow.toISOString().slice(0, 10), interval: 1, correctCount: 0, wrongCount: wrongList.length });
-			const content = fm + wrongText + knowledgeLinks;
+			const content = fm + normalizeExamContent(wrongText) + knowledgeLinks;
 			const fileName = safeName(this.answerSourceName) + "_错题_" + dateStr + ".md";
 			if (isAbs(this.plugin.rootPath(this.plugin.settings.wrongBookFolder))) {
 				const dir = this.plugin.rootPath(this.plugin.settings.wrongBookFolder);
@@ -2486,11 +2602,76 @@ export class MainSidebarView extends ItemView {
 	}
 
 	// ===================== HELPERS =====================
-	async openCurrentFileGenerate() {
-		const file = this.app.workspace.getActiveFile();
-		if (!file || file.extension !== "md") { new Notice("请先打开一个Markdown文档"); return; }
-		const text = await this.app.vault.read(file);
-		this.startGenerate(text, file.name, file.path);
+	openGeneratePicker() {
+		this.genPickerMode = "current";
+		this.fpSelected.clear();
+		this.fpAllFiles = [];
+		this.homeView = "filePicker";
+		void this.renderHomeTab();
+	}
+
+	async openCurrentFileExtract(file?: TFile) {
+		const target = file ?? this.app.workspace.getActiveFile();
+		const ext = target ? target.extension.toLowerCase() : "";
+		if (!target || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice("请打开一个支持的试卷文件（md/txt/rtf/docx/pdf/图片）"); return; }
+
+		const cfg = this.plugin.settings;
+		const saveFolder = this.plugin.rootPath(cfg.extractedExamFolder || "题目/识别试卷");
+		await ensureFolder(this.app, saveFolder);
+
+		this.examProcessing = true;
+		this.examStatusText = "正在识别当前文件 " + target.name + "...";
+		this.homeView = "examBrowser";
+		void this.renderHomeTab();
+
+		try {
+			const content = await this.examSourceToText(target);
+			if (!content || content.trim().length === 0) { new Notice("未能读取文件内容"); return; }
+
+			let allQuestionsText = "";
+			if (isImageFile(target.name)) {
+				allQuestionsText = content;
+			} else if (content.length <= MAX_EXAM_CHUNK_CHARS) {
+				const full = await this.callAIWithPrompt(buildExamExtractPrompt(content));
+				if (full) allQuestionsText = full;
+			} else {
+				const chunks: string[] = [];
+				for (let start = 0; start < content.length; start += MAX_EXAM_CHUNK_CHARS - EXAM_CHUNK_OVERLAP) {
+					chunks.push(content.slice(start, start + MAX_EXAM_CHUNK_CHARS));
+					if (start + MAX_EXAM_CHUNK_CHARS >= content.length) break;
+				}
+				for (let ci = 0; ci < chunks.length; ci++) {
+					this.examStatusText = "正在识别当前文件 " + target.name + " - 第" + (ci + 1) + "/" + chunks.length + "段...";
+					void this.renderHomeTab();
+					const full = await this.callAIWithPrompt(buildExamExtractPrompt(chunks[ci]!, ci + 1, chunks.length));
+					if (full) allQuestionsText += "\n\n" + full;
+				}
+			}
+			if (!allQuestionsText.trim()) { new Notice("未能识别出题目"); return; }
+
+			const mergedText = mergeExamChunks(allQuestionsText);
+
+			const questions = parseQuestions(mergedText);
+			if (questions.length === 0) { new Notice("未能识别出题目"); return; }
+
+			const { cleanText } = parseAITagsFromResult(mergedText);
+			const aiTags = await this.aiSuggestTags(mergedText);
+			const saveContent = buildExamFrontmatter(target.basename, aiTags) + normalizeExamContent(cleanText);
+			const safeBase = target.basename.replace(/[<>:"/\\|?*]/g, "_");
+			const savePath = saveFolder + "/" + safeBase + " - AI识别.md";
+			try { await this.app.vault.create(savePath, saveContent); }
+			catch { await this.app.vault.create(saveFolder + "/" + safeBase + " - AI识别_" + Date.now() + ".md", saveContent); }
+
+			this.examSelected.clear();
+			this.examStatusText = "";
+			new Notice("识别完成，共 " + questions.length + " 题，已保存至 " + saveFolder);
+			this.startAnswer(normalizeExamContent(cleanText), target.basename + " - AI识别", savePath);
+		} catch (err) {
+			if ((err as Error).name !== "AbortError") new Notice("识别失败：" + (err as Error).message);
+		} finally {
+			this.examProcessing = false;
+			if (this.homeView === "examBrowser") void this.renderHomeTab();
+		}
 	}
 
 	async getStats() {
@@ -2505,8 +2686,9 @@ export class MainSidebarView extends ItemView {
 		let questionCount = 0;
 		let noteCount = 0;
 		if (qFolder) {
-			if (isAbs(qFolder)) { try { if (fs.existsSync(qFolder)) questionCount = fs.readdirSync(qFolder).filter((f: string) => f.endsWith(".md")).length; } catch { /* */ } }
-			else { const tf = this.app.vault.getAbstractFileByPath(qFolder); if (tf instanceof TFolder) questionCount = tf.children.filter(f => f instanceof TFile && f.name.endsWith(".md")).length; }
+			const excludes = [this.plugin.rootPath(this.plugin.settings.questionKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.noteKnowledgeFolder), this.plugin.rootPath(this.plugin.settings.wrongKnowledgeFolder)].filter(Boolean);
+			if (isAbs(qFolder)) { try { if (fs.existsSync(qFolder)) questionCount = listMdFilesRecursive(qFolder, excludes).length; } catch { /* */ } }
+			else { const prefix = qFolder.endsWith("/") ? qFolder : qFolder + "/"; const exclPrefixes = excludes.map(p => (p.endsWith("/") ? p : p + "/")); questionCount = this.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e))).length; }
 		}
 		if (nFolder) {
 			if (isAbs(nFolder)) { try { if (fs.existsSync(nFolder)) noteCount = fs.readdirSync(nFolder).filter((f: string) => f.endsWith(".md")).length; } catch { /* */ } }

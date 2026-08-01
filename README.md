@@ -5,7 +5,7 @@
 **AI-powered, spaced-repetition study plugin for Obsidian**
 
 [![Obsidian](https://img.shields.io/badge/Obsidian-1.12.0+-483699?style=flat-square&logo=obsidian)](https://obsidian.md)
-[![Release](https://img.shields.io/github/v/release/xxinjie21/Smart-Quiz-Tutor?style=flat-square&include_prereleases&label=release)](https://github.com/xxinjie21/Smart-Quiz-Tutor/releases)
+[![Release](https://img.shields.io/github/v/release/xxinjie21/question-generator?style=flat-square&include_prereleases&label=release)](https://github.com/xxinjie21/question-generator/releases)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue.svg?style=flat-square&logo=typescript)](https://www.typescriptlang.org)
 [![AI](https://img.shields.io/badge/AI-Ollama%20%7C%20OpenAI-brightgreen.svg?style=flat-square)](https://ollama.com)
 
@@ -67,6 +67,12 @@
 
 ---
 
+## Repository
+
+**GitHub:** https://github.com/xxinjie21/question-generator
+
+---
+
 ## Installation
 
 ### From Obsidian Community Plugins
@@ -76,7 +82,7 @@
 
 ### Manual Installation
 ```bash
-git clone https://github.com/xxinjie21/Smart-Quiz-Tutor.git
+git clone https://github.com/xxinjie21/question-generator.git
 cd Smart-Quiz-Tutor
 npm install
 npm run build
@@ -181,7 +187,9 @@ The sidebar has 6 tabs:
 
 If this plugin helps your studies, consider giving it a star on GitHub!
 
-For issues and feature requests, please [open an issue](https://github.com/xxinjie21/Smart-Quiz-Tutor/issues).
+**GitHub:** https://github.com/xxinjie21/question-generator
+
+For issues and feature requests, please [open an issue](https://github.com/xxinjie21/question-generator/issues).
 
 ---
 
@@ -245,6 +253,12 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 
 ---
 
+## 仓库地址
+
+**GitHub:** https://github.com/xxinjie21/question-generator
+
+---
+
 ## 安装
 
 ### 从 Obsidian 社区插件安装
@@ -254,7 +268,7 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 
 ### 手动安装
 ```bash
-git clone https://github.com/xxinjie21/Smart-Quiz-Tutor.git
+git clone https://github.com/xxinjie21/question-generator.git
 cd Smart-Quiz-Tutor
 npm install
 npm run build
@@ -359,7 +373,9 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 
 如果这个插件对你的学习有帮助，欢迎在 GitHub 上给一个 ⭐！
 
-如有问题或建议，请 [提交 Issue](https://github.com/xxinjie21/Smart-Quiz-Tutor/issues)。
+**GitHub:** https://github.com/xxinjie21/question-generator
+
+如有问题或建议，请 [提交 Issue](https://github.com/xxinjie21/question-generator/issues)。
 
 ---
 

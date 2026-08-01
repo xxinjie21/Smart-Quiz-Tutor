@@ -1,5 +1,6 @@
 import { App } from "obsidian";
 import * as fs from "fs";
+import * as path from "path";
 
 export function isAbs(p: string): boolean {
 	return /^[A-Za-z]:[/\\]/.test(p) || p.startsWith("/");
@@ -23,9 +24,61 @@ export function readFileStr(filePath: string): string {
 	return fs.readFileSync(filePath, "utf-8");
 }
 
+export const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp"] as const;
+export const DOCUMENT_EXTS = ["txt", "rtf", "docx", "pdf"] as const;
+export const EXAM_SOURCE_EXTS = [...IMAGE_EXTS, ...DOCUMENT_EXTS] as string[];
+
+export function isImageFile(name: string): boolean {
+	const ext = name.split(".").pop()?.toLowerCase() ?? "";
+	return (IMAGE_EXTS as readonly string[]).includes(ext);
+}
+
+export function isDocumentFile(name: string): boolean {
+	const ext = name.split(".").pop()?.toLowerCase() ?? "";
+	return (DOCUMENT_EXTS as readonly string[]).includes(ext);
+}
+
 export function listMdFiles(dir: string): string[] {
 	if (!fs.existsSync(dir)) return [];
 	return fs.readdirSync(dir).filter((f: string) => f.endsWith(".md"));
+}
+
+export function listFilesRecursive(dir: string, exts: readonly string[], excludePrefixes: string[] = []): string[] {
+	if (!fs.existsSync(dir)) return [];
+	const ex = excludePrefixes.filter(Boolean).map(p => path.normalize(p));
+	const out: string[] = [];
+	const walk = (d: string) => {
+		for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+			const fp = path.join(d, entry.name);
+			if (entry.isDirectory()) {
+				if (ex.some(p => fp === p || fp.startsWith(p + path.sep))) continue;
+				walk(fp);
+			} else {
+				const ext = path.extname(entry.name).slice(1).toLowerCase();
+				if (exts.includes(ext)) out.push(fp);
+			}
+		}
+	};
+	walk(dir);
+	return out;
+}
+
+export function listMdFilesRecursive(dir: string, excludePrefixes: string[] = []): string[] {
+	if (!fs.existsSync(dir)) return [];
+	const ex = excludePrefixes.filter(Boolean).map(p => path.normalize(p));
+	const out: string[] = [];
+	const walk = (d: string) => {
+		for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+			const fp = path.join(d, entry.name);
+			if (entry.isDirectory()) {
+				if (ex.some(p => fp === p || fp.startsWith(p + path.sep))) continue;
+				walk(fp);
+			}
+			else if (entry.name.endsWith(".md")) out.push(fp);
+		}
+	};
+	walk(dir);
+	return out;
 }
 
 export function deleteFileAbs(filePath: string) {

@@ -31,6 +31,9 @@
 	"dependencies": {
 		"docx": "^9.7.1",
 		"file-saver": "^2.0.5",
-		"marked": "^18.0.6"
+		"mammoth": "^1.12.0",
+		"marked": "^18.0.6",
+		"pdf-parse": "^2.4.5",
+		"pdfjs-dist": "^5.4.296"
 	}
 }

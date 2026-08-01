@@ -55,6 +55,7 @@ export interface PluginSettings {
 	countEssay: number;
 	questionFolder: string;
 	wrongBookFolder: string;
+	convertedMdFolder: string;
 	excludeFolders: string;
 	autoSave: boolean;
 	lastTags: string;
@@ -71,7 +72,6 @@ export interface PluginSettings {
 	questionKnowledgeFolder: string;
 	noteKnowledgeFolder: string;
 	wrongKnowledgeFolder: string;
-	customTools: { label: string; url: string }[];
 }
 
 export interface TreeNode {
