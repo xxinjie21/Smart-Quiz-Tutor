@@ -171,6 +171,7 @@ export function normalizeExamContent(text: string): string {
 	let inExplainBlock = false;
 	let answerSeq = 0;
 	let expSeq = 0;
+	let blankCount = 0;
 	const nextPoint = (raw: string): string => {
 		const cleaned = raw.trim().replace(/^(?:\*\*)?(?:\(\d+\)|\d+(?:\*\*)?[.、）)])\s*/, "").trim();
 		if (!cleaned.replace(/[（(）)\s]/g, "")) return "";
@@ -191,9 +192,15 @@ export function normalizeExamContent(text: string): string {
 		if (trimmed === "") {
 			inAnswerBlock = false;
 			inExplainBlock = false;
-			if (result.length > 0 && result[result.length - 1] !== "") result.push("");
+			blankCount++;
+			if (result.length > 0) {
+				const last = result[result.length - 1]!;
+				if (blankCount === 1 && last !== "") result.push("");
+				else if (blankCount === 2 && last === "") result.push("");
+			}
 			continue;
 		}
+		blankCount = 0;
 		if (/^#{1,6}\s+/.test(trimmed)) {
 			if (/^####\s+/.test(trimmed) && (inAnswerBlock || lastType === "answer")) {
 				answerSeq = 0;
@@ -227,7 +234,9 @@ export function normalizeExamContent(text: string): string {
 				continue;
 			}
 			if (lastType === "answer" || lastType === "explanation" || lastType === "option" || lastType === "question") {
-				if (result.length > 0 && result[result.length - 1] !== "") result.push("");
+				while (result.length > 0 && result[result.length - 1] === "") result.pop();
+				result.push("");
+				result.push("");
 			}
 			result.push(trimmed);
 			lastType = "question";

@@ -8,16 +8,37 @@ export function parseFM(content: string): { meta: Record<string, FmValue>; body:
 	const yaml = content.slice(3, end).trim();
 	const body = content.slice(end + 3).trim();
 	const meta: Record<string, FmValue> = {};
-	for (const line of yaml.split("\n")) {
-		const i = line.indexOf(":");
-		if (i === -1) continue;
-		const key = line.slice(0, i).trim();
-		let val = line.slice(i + 1).trim();
+	const lines = yaml.split("\n");
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i]!;
+		const idx = line.indexOf(":");
+		if (idx === -1) continue;
+		const key = line.slice(0, idx).trim();
+		let val = line.slice(idx + 1).trim();
 		if (val.startsWith("[") && val.endsWith("]")) {
 			meta[key] = val.slice(1, -1).split(",").map(s => s.trim().replace(/^"|"$/g, ""));
 		} else if (val === "true") meta[key] = true;
 		else if (val === "false") meta[key] = false;
-		else meta[key] = val.replace(/^"|"$/g, "");
+		else if (val === "") {
+			const list: string[] = [];
+			for (let j = i + 1; j < lines.length; j++) {
+				const m = lines[j]!.match(/^\s*-\s*(.+)$/);
+				if (!m) break;
+				const item = m[1]!.trim().replace(/^"|"$/g, "");
+				if (item) list.push(item);
+			}
+			if (list.length > 0) meta[key] = list;
+			else meta[key] = "";
+		}
+		else {
+			const raw = val.replace(/^"|"$/g, "");
+			if (key === "interval" || key === "correctCount" || key === "wrongCount") {
+				const num = Number(raw);
+				meta[key] = isFinite(num) ? num : raw;
+			} else {
+				meta[key] = raw;
+			}
+		}
 	}
 	return { meta, body };
 }

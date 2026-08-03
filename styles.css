@@ -18,6 +18,14 @@
 
 	/* Softened border — Craft barely uses borders */
 	--qg-border: var(--background-modifier-border);
+
+	/* GitHub-style heatmap (light default) */
+	--qg-heat-0: #ebedf0;
+	--qg-heat-1: #9be9a8;
+	--qg-heat-2: #40c463;
+	--qg-heat-3: #30a14e;
+	--qg-heat-4: #216e39;
+	--qg-heat-outline: rgba(27, 31, 36, 0.06);
 }
 
 .theme-dark .question-generator-sidebar {
@@ -25,6 +33,14 @@
 	--qg-surface-2: #27272a;
 	--qg-surface-3: #303034;
 	--qg-bg: #161617;
+
+	/* GitHub dark heatmap palette */
+	--qg-heat-0: #161b22;
+	--qg-heat-1: #0e4429;
+	--qg-heat-2: #006d32;
+	--qg-heat-3: #26a641;
+	--qg-heat-4: #39d353;
+	--qg-heat-outline: rgba(255, 255, 255, 0);
 }
 
 .theme-light .question-generator-sidebar {
@@ -54,6 +70,7 @@
 
 /* ---------- Nav: Craft segmented control ---------- */
 .qg-nav {
+	position: relative;
 	background: var(--qg-surface-2) !important;
 	border-radius: var(--qg-radius-pill) !important;
 	border: 1px solid transparent !important;
@@ -63,11 +80,13 @@
 }
 
 .qg-nav-item {
+	position: relative;
+	z-index: 1;
 	border-radius: var(--qg-radius-pill) !important;
 	padding: 6px 0 !important;
 	font-weight: 500 !important;
 	color: var(--text-muted);
-	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+	transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 	white-space: nowrap;
 }
 
@@ -77,10 +96,24 @@
 }
 
 .qg-nav-item-active {
-	background: var(--qg-surface-1) !important;
 	color: var(--text-normal) !important;
 	font-weight: 600 !important;
+}
+.qg-nav-item-active:hover {
+	background: transparent !important;
+}
+
+.qg-nav-indicator {
+	position: absolute;
+	top: 3px;
+	bottom: 3px;
+	left: 3px;
+	border-radius: var(--qg-radius-pill) !important;
+	background: var(--qg-surface-1) !important;
 	box-shadow: var(--qg-shadow-1) !important;
+	z-index: 0;
+	pointer-events: none;
+	transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ---------- Action rows (home quick actions / tools) ---------- */
@@ -200,6 +233,22 @@
 .question-generator-sidebar button.mod-cta:hover {
 	filter: brightness(1.08);
 	box-shadow: 0 4px 14px color-mix(in srgb, var(--interactive-accent) 40%, transparent) !important;
+}
+
+/* Active preset button in review-interval settings */
+button.qg-interval-active,
+.question-generator-sidebar button.qg-interval-active {
+	background: var(--interactive-accent) !important;
+	border-color: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
+	font-weight: 650 !important;
+}
+
+button.qg-interval-active:hover,
+.question-generator-sidebar button.qg-interval-active:hover {
+	background: var(--interactive-accent) !important;
+	border-color: var(--interactive-accent) !important;
+	color: var(--text-on-accent) !important;
 }
 
 /* ---------- Inputs: soft fields ---------- */

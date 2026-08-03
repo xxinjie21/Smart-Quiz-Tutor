@@ -445,6 +445,19 @@ describe("normalizeExamContent", () => {
 		const result = normalizeExamContent("1. 题干\n答案：A\n> 补充说明：这里是提示\n解析：x");
 		expect(result).toContain("> 补充说明：这里是提示");
 	});
+
+	it("preserves two blank lines between questions", () => {
+		const input = "**1.** 第一题\n答案：A\n解析：x\n\n\n**2.** 第二题\n答案：B\n解析：y";
+		const result = normalizeExamContent(input);
+		expect(result).toContain("**解析：**\nx\n\n\n**2.** 第二题");
+		expect(result).not.toContain("**解析：**\nx\n\n**2.** 第二题");
+	});
+
+	it("collapses one blank line to two between questions", () => {
+		const input = "**1.** 第一题\n答案：A\n解析：x\n\n**2.** 第二题\n答案：B\n解析：y";
+		const result = normalizeExamContent(input);
+		expect(result).toContain("**解析：**\nx\n\n\n**2.** 第二题");
+	});
 });
 
 describe("mergeExamChunks", () => {

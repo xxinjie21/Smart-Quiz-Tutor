@@ -8,15 +8,19 @@
 # npm
 node_modules
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
-main.js
+# Compiled main.js is tracked and committed along with source for this repo,
+# and is also published via GitHub Releases for Obsidian community installs.
+# Node ignores it while running local builds but we keep tracking it.
+# main.js
 
 # Exclude sourcemaps
 *.map
 
 # obsidian
 data.json
+
+# local workspace memory (agent tooling)
+.workbuddy/
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

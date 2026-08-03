@@ -1,9 +1,7 @@
 import { Notice, TFile, TFolder, type App } from "obsidian";
 import type { PluginSettings, WrongAnswerNote } from "../types";
-import { parseFM, buildFM, knowledgeTags } from "../utils/frontmatter";
-import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder } from "../utils/fs-utils";
-import { safeName } from "../utils/text";
-import { todayStr } from "../utils/review";
+import { knowledgeTags } from "../utils/frontmatter";
+import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, joinPath } from "../utils/fs-utils";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -15,69 +13,54 @@ export interface KnowledgeServiceProvider {
 	invalidateCache(): void;
 }
 
+export type IndexSource = "题目" | "笔记" | "错题";
+
+export function parseIndexSections(content: string): Record<IndexSource, string[]> {
+	const sections: Record<IndexSource, string[]> = { 题目: [], 笔记: [], 错题: [] };
+	let current: IndexSource | null = null;
+	for (const line of content.split("\n")) {
+		const h = line.trim();
+		if (h === "## 相关题目") { current = "题目"; continue; }
+		if (h === "## 相关笔记") { current = "笔记"; continue; }
+		if (h === "## 相关错题") { current = "错题"; continue; }
+		if (current) {
+			const m = line.match(/\[\[([^\]|#]+)(?:\|[^\]]*)?\]\]/);
+			if (m) { const l = m[1]!.trim(); if (l && !sections[current].includes(l)) sections[current].push(l); }
+		}
+	}
+	return sections;
+}
+
+export function isKnowledgeIndexContent(content: string): boolean {
+	return /^---\n\s*tags:\s*\[知识点\]\s*\n/.test(content);
+}
+
+export function buildIndexBody(tag: string, sections: Record<IndexSource, string[]>): string {
+	const sectionLines = (src: IndexSource) => {
+		const arr = [...new Set(sections[src])].sort();
+		return arr.length > 0 ? arr.map(l => "- [[" + l + "]]").join("\n") : "暂无";
+	};
+	return `---\ntags: [知识点]\n---\n# ${tag}\n\n## 相关题目\n${sectionLines("题目")}\n\n## 相关笔记\n${sectionLines("笔记")}\n\n## 相关错题\n${sectionLines("错题")}\n`;
+}
+
 export class KnowledgeService {
 	constructor(private p: KnowledgeServiceProvider) {}
 
-	async updateKnowledgePointMOC(tags: string[], noteFileName: string) {
-		const kp = knowledgeTags(tags);
-		if (kp.length === 0) return;
-		const mocFolder = this.p.rootPath(this.p.settings.wrongKnowledgeFolder);
-		await ensureFolder(this.p.app, mocFolder);
-		for (const tag of kp) {
-			const mocPath = mocFolder + "/" + safeName(tag) + ".md";
-			const link = "[[" + noteFileName.replace(/\.md$/, "") + "]]";
-			let existing = "";
-			let existingLinks: string[] = [];
-			try {
-				if (isAbs(mocFolder)) {
-					existing = readFileStr(mocPath);
-				} else {
-					const f = this.p.app.vault.getAbstractFileByPath(mocPath);
-					if (f instanceof TFile) existing = await this.p.app.vault.read(f);
-				}
-				const { meta, body } = parseFM(existing);
-				existingLinks = Array.isArray(meta.relatedLinks) ? meta.relatedLinks : [];
-				const linkPattern = /\[\[([^\]]+)\]\]/g;
-				let m;
-				while ((m = linkPattern.exec(body)) !== null) { if (!existingLinks.includes(m[1]!)) existingLinks.push(m[1]!); }
-			} catch { /* empty */ }
-			if (!existingLinks.includes(link.replace(/\[\[|\]\]/g, ""))) existingLinks.push(link.replace(/\[\[|\]\]/g, ""));
-			const fm = buildFM({ tags: ["知识点", tag], relatedLinks: existingLinks, date: todayStr() });
-			let body = "# " + tag + "\n\n";
-			body += "> 知识点索引（MOC），由智学助手自动维护\n\n";
-			body += "## 相关错题\n\n";
-			for (const l of existingLinks) {
-				body += "- [[" + l.replace(/\[\[|\]\]/g, "") + "]]\n";
-			}
-			try {
-				if (isAbs(mocFolder)) {
-					writeFileStr(mocPath, fm + body);
-				} else {
-					const existingFile = this.p.app.vault.getAbstractFileByPath(mocPath);
-					if (existingFile instanceof TFile) await this.p.app.vault.modify(existingFile, fm + body);
-					else await this.p.app.vault.create(mocPath, fm + body);
-				}
-			} catch { /* empty */ }
-		}
-	}
-
 	async loadExistingKnowledgeTags(): Promise<string[]> {
-		const folders = [this.p.rootPath(this.p.settings.questionKnowledgeFolder), this.p.rootPath(this.p.settings.noteKnowledgeFolder), this.p.rootPath(this.p.settings.wrongKnowledgeFolder)];
+		const folder = this.p.rootPath(this.p.settings.knowledgeFolder);
 		const tagSet = new Set<string>();
-		for (const folder of folders) {
-			if (!folder) continue;
-			if (isAbs(folder)) {
-				if (!fs.existsSync(folder)) continue;
-				for (const f of listMdFiles(folder)) {
-					tagSet.add(f.replace(/\.md$/, ""));
-				}
-			} else {
-				const folderFile = this.p.app.vault.getAbstractFileByPath(folder);
-				if (folderFile instanceof TFolder) {
-					for (const child of folderFile.children) {
-						if (child instanceof TFile && child.extension === "md") {
-							tagSet.add(child.basename);
-						}
+		if (!folder) return [];
+		if (isAbs(folder)) {
+			if (!fs.existsSync(folder)) return [];
+			for (const f of listMdFiles(folder)) {
+				tagSet.add(f.replace(/\.md$/, ""));
+			}
+		} else {
+			const folderFile = this.p.app.vault.getAbstractFileByPath(folder);
+			if (folderFile instanceof TFolder) {
+				for (const child of folderFile.children) {
+					if (child instanceof TFile && child.extension === "md") {
+						tagSet.add(child.basename);
 					}
 				}
 			}
@@ -85,74 +68,64 @@ export class KnowledgeService {
 		return [...tagSet];
 	}
 
-	async syncKnowledgeFolder(tags: string[], links: { label: string; path: string }[], folderOverride?: string) {
-		const folder = folderOverride || this.p.rootPath(this.p.settings.wrongKnowledgeFolder);
+	async syncKnowledgeFolder(tags: string[], links: { label: string; path: string }[], source: IndexSource = "错题", folderOverride?: string) {
+		const folder = folderOverride || this.p.rootPath(this.p.settings.knowledgeFolder);
 		if (!folder) return;
+		for (const tag of tags) {
+			const fp = joinPath(folder, tag + ".md");
+			const existing = await this.readFileSmart(fp, folder);
+			const sections = parseIndexSections(existing);
+			for (const l of links) {
+				const name = l.label;
+				if (name && !sections[source].includes(name)) sections[source].push(name);
+			}
+			await this.writeFileSmart(fp, folder, buildIndexBody(tag, sections));
+		}
+	}
+
+	private async readFileSmart(filePath: string, folder: string): Promise<string> {
+		if (isAbs(folder)) {
+			try { return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : ""; } catch { return ""; }
+		}
+		const f = this.p.app.vault.getAbstractFileByPath(filePath);
+		if (f instanceof TFile) { try { return await this.p.app.vault.read(f); } catch { return ""; } }
+		return "";
+	}
+
+	private async writeFileSmart(filePath: string, folder: string, content: string): Promise<void> {
 		if (isAbs(folder)) {
 			if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
-			for (const tag of tags) {
-				const fp = folder + "\\" + tag + ".md";
-				const existingLinks: string[] = [];
-				if (fs.existsSync(fp)) {
-					const content = fs.readFileSync(fp, "utf-8");
-					const linkMatches = content.match(/\[\[([^\]]+)\]\]/g);
-					if (linkMatches) existingLinks.push(...linkMatches.map(l => l.replace(/\[\[|\]\]/g, "")));
-				}
-				const allLinks = [...new Set([...existingLinks, ...links.map(l => l.label)])].sort();
-				const body = `---\ntags: [知识点]\n---\n# ${tag}\n\n## 相关题目\n${allLinks.filter(l => l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n\n## 相关错题\n${allLinks.filter(l => !l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n`;
-				fs.writeFileSync(fp, body, "utf-8");
-			}
+			fs.writeFileSync(filePath, content, "utf-8");
 		} else {
-			const folderObj = this.p.app.vault.getAbstractFileByPath(folder);
-			if (!folderObj || !(folderObj instanceof TFolder)) {
-				await this.p.app.vault.createFolder(folder).catch(() => {});
-			}
-			for (const tag of tags) {
-				const fp = folder + "/" + tag + ".md";
-				const existingFile = this.p.app.vault.getAbstractFileByPath(fp);
-				const existingLinks: string[] = [];
-				if (existingFile instanceof TFile) {
-					const content = await this.p.app.vault.read(existingFile);
-					const linkMatches = content.match(/\[\[([^\]]+)\]\]/g);
-					if (linkMatches) existingLinks.push(...linkMatches.map(l => l.replace(/\[\[|\]\]/g, "")));
-				}
-				const allLinks = [...new Set([...existingLinks, ...links.map(l => l.label)])].sort();
-				const body = `---\ntags: [知识点]\n---\n# ${tag}\n\n## 相关题目\n${allLinks.filter(l => l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n\n## 相关错题\n${allLinks.filter(l => !l.includes("试题")).map(l => "-[[" + l + "]]").join("\n") || "暂无"}\n`;
-				if (existingFile instanceof TFile) {
-					await this.p.app.vault.modify(existingFile, body);
-				} else {
-					await this.p.app.vault.create(fp, body);
-				}
-			}
+			const existing = this.p.app.vault.getAbstractFileByPath(filePath);
+			if (existing instanceof TFile) await this.p.app.vault.modify(existing, content);
+			else await this.p.app.vault.create(filePath, content);
 		}
 	}
 
 	async rebuildKnowledgeIndex() {
-		const tagMap: Record<string, { label: string; path: string }[]> = {};
-		const addLink = (tag: string, label: string, p: string) => {
-			const arr = tagMap[tag] || (tagMap[tag] = []);
+		const tagMap: Record<string, Record<IndexSource, { label: string; path: string }[]>> = {};
+		const addLink = (tag: string, src: IndexSource, label: string, p: string) => {
+			const arr = (tagMap[tag] || (tagMap[tag] = { 题目: [], 笔记: [], 错题: [] }))[src];
 			if (!arr.some(l => l.label === label)) arr.push({ label, path: p });
 		};
 		const wrongNotes = await this.p.loadAllWrongNotes();
 		for (const n of wrongNotes) {
-			for (const t of knowledgeTags(n.tags)) addLink(t, n.baseName, n.filePath);
+			for (const t of knowledgeTags(n.tags)) addLink(t, "错题", n.baseName, n.filePath);
 		}
-		const extractTagsFromFile = async (file: TFile, folder: string) => {
+		const extractTagsFromFile = async (file: TFile, folder: string, src: IndexSource) => {
 			try {
 				let content = "";
 				if (isAbs(folder)) { content = readFileStr(file.path); } else { content = await this.p.app.vault.read(file); }
 				const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
 				if (fmMatch) {
-					const tagMatch = fmMatch[1]!.match(/tags:\s*\[([^\]]*)\]/);
-					if (tagMatch) {
-						const tags = tagMatch[1]!.split(",").map(s => s.trim()).filter(Boolean);
-						for (const t of knowledgeTags(tags)) addLink(t, file.basename, file.path);
-					}
+					const tags = extractTagsFromFrontmatter(fmMatch[1]!);
+					for (const t of knowledgeTags(tags)) addLink(t, src, file.basename, file.path);
 				}
 			} catch { /* skip */ }
 		};
 		const listMdFiles = (folder: string): TFile[] => {
-			const excludes = [this.p.rootPath(this.p.settings.questionKnowledgeFolder), this.p.rootPath(this.p.settings.noteKnowledgeFolder), this.p.rootPath(this.p.settings.wrongKnowledgeFolder)].filter(Boolean);
+			const excludes = [this.p.rootPath(this.p.settings.knowledgeFolder)].filter(Boolean);
 			if (isAbs(folder)) {
 				try {
 					if (!fs.existsSync(folder)) return [];
@@ -170,24 +143,24 @@ export class KnowledgeService {
 		};
 		const qFolder = this.p.rootPath(this.p.settings.questionFolder);
 		if (qFolder) {
-			for (const f of listMdFiles(qFolder)) await extractTagsFromFile(f, qFolder);
+			for (const f of listMdFiles(qFolder)) await extractTagsFromFile(f, qFolder, "题目");
 		}
 		const nFolder = this.p.rootPath(this.p.settings.noteViewFolder);
 		if (nFolder) {
-			for (const f of listMdFiles(nFolder)) await extractTagsFromFile(f, nFolder);
+			for (const f of listMdFiles(nFolder)) await extractTagsFromFile(f, nFolder, "笔记");
 		}
-		const allTags = Object.keys(tagMap);
-		const knowledgeFolders = [this.p.rootPath(this.p.settings.questionKnowledgeFolder), this.p.rootPath(this.p.settings.noteKnowledgeFolder), this.p.rootPath(this.p.settings.wrongKnowledgeFolder)];
-		for (const kf of knowledgeFolders) {
-			if (!kf) continue;
-			if (allTags.length > 0) await this.syncKnowledgeFolder(allTags, [], kf);
-			for (const [tag, links] of Object.entries(tagMap)) {
-				await this.syncKnowledgeFolder([tag], links, kf);
+		const kf = this.p.rootPath(this.p.settings.knowledgeFolder);
+		if (kf) {
+			for (const [tag, srcMap] of Object.entries(tagMap)) {
+				const sections: Record<IndexSource, string[]> = { 题目: [], 笔记: [], 错题: [] };
+				for (const [src, links] of Object.entries(srcMap)) {
+					sections[src as IndexSource] = links.map(l => l.label);
+				}
+				try {
+					await this.writeFileSmart(joinPath(kf, tag + ".md"), kf, buildIndexBody(tag, sections));
+				} catch { /* 单个标签索引写入失败不应中断整个重建 */ }
 			}
-		}
-		for (const kf of knowledgeFolders) {
-			if (!kf) continue;
-			await this.removeStaleTagFiles(kf, allTags);
+			await this.removeStaleTagFiles(kf, Object.keys(tagMap));
 		}
 	}
 
@@ -197,17 +170,22 @@ export class KnowledgeService {
 			try {
 				if (!fs.existsSync(folder)) return;
 				for (const f of listMdFiles(folder)) {
-					if (!keep.has(f.replace(/\.md$/, ""))) fs.unlinkSync(folder + "\\" + f);
+					if (keep.has(f.replace(/\.md$/, ""))) continue;
+					let content = "";
+					try { content = readFileStr(joinPath(folder, f)); } catch { /* skip */ }
+					if (isKnowledgeIndexContent(content)) fs.unlinkSync(joinPath(folder, f));
 				}
 			} catch { /* skip */ }
 			return;
 		}
 		const folderObj = this.p.app.vault.getAbstractFileByPath(folder);
 		if (!(folderObj instanceof TFolder)) return;
-		for (const child of folderObj.children) {
-			if (child instanceof TFile && child.extension === "md" && !keep.has(child.basename)) {
-				try { await this.p.app.fileManager.trashFile(child); } catch { /* skip */ }
-			}
+		for (const child of [...folderObj.children]) {
+			if (!(child instanceof TFile) || child.extension !== "md" || keep.has(child.basename)) continue;
+			try {
+				const content = await this.p.app.vault.read(child);
+				if (isKnowledgeIndexContent(content)) await this.p.app.fileManager.trashFile(child);
+			} catch { /* skip */ }
 		}
 	}
 
@@ -229,7 +207,7 @@ export class KnowledgeService {
 
 	async migrateKnowledgeLinks() {
 		const notes = await this.p.loadAllWrongNotes(true);
-		const mocFolder = this.p.rootPath(this.p.settings.wrongKnowledgeFolder);
+		const mocFolder = this.p.rootPath(this.p.settings.knowledgeFolder);
 		await ensureFolder(this.p.app, mocFolder);
 		const allTagLinks: Record<string, string[]> = {};
 		let updated = 0;
@@ -266,28 +244,46 @@ export class KnowledgeService {
 		}
 
 		for (const [tag, linkNames] of Object.entries(allTagLinks)) {
-			const mocPath = mocFolder + "/" + safeName(tag) + ".md";
-			const fm = buildFM({ tags: ["知识点", tag], date: todayStr() });
-			let body = "# " + tag + "\n\n";
-			body += "> 知识点索引（MOC），由智学助手自动维护\n\n";
-			body += "## 相关错题\n\n";
-			for (const name of linkNames) {
-				body += "- [[" + name + "]]\n";
-			}
-			try {
-				if (isAbs(mocFolder)) {
-					writeFileStr(mocPath, fm + body);
-				} else {
-					const existingFile = this.p.app.vault.getAbstractFileByPath(mocPath);
-					if (existingFile instanceof TFile) await this.p.app.vault.modify(existingFile, fm + body);
-					else await this.p.app.vault.create(mocPath, fm + body);
-				}
-			} catch { /* empty */ }
+			await this.syncKnowledgeFolder([tag], linkNames.map(name => ({ label: name, path: mocFolder })), "错题", mocFolder);
 		}
 
 		if (updated > 0) new Notice("已为 " + updated + " 条错题补充知识点链接");
 		this.p.invalidateCache();
 	}
+}
+
+function extractTagsFromFrontmatter(yaml: string): string[] {
+	const tags: string[] = [];
+	for (const line of yaml.split("\n")) {
+		const i = line.indexOf(":");
+		if (i === -1) continue;
+		const key = line.slice(0, i).trim();
+		if (key.toLowerCase() !== "tags") continue;
+		const rest = line.slice(i + 1).trim();
+		if (rest.startsWith("[")) {
+			const close = rest.indexOf("]");
+			const inner = close === -1 ? rest.slice(1) : rest.slice(1, close);
+			tags.push(...inner.split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean));
+		} else if (rest) {
+			tags.push(...rest.split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean));
+		}
+	}
+	if (tags.length === 0) {
+		// 块列表形式：tags:\n  - 试卷\n  - AI识别
+		const lines = yaml.split("\n");
+		for (let k = 0; k < lines.length; k++) {
+			if (lines[k]!.trim().toLowerCase() === "tags" || lines[k]!.trim().toLowerCase() === "tags:") {
+				for (let j = k + 1; j < lines.length; j++) {
+					const m = lines[j]!.match(/^\s*-\s*(.+)$/);
+					if (!m) break;
+					const t = m[1]!.trim().replace(/^["']|["']$/g, "");
+					if (t) tags.push(t);
+				}
+				break;
+			}
+		}
+	}
+	return [...new Set(tags)];
 }
 
 export function buildTaggingPrompt(content: string, existingTags: string[]): string {

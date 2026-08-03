@@ -94,3 +94,20 @@ export async function ensureFolder(app: App, folderPath: string) {
 		}
 	}
 }
+
+export function parseExcludeFolderNames(cfgStr: string): string[] {
+	return cfgStr.split(",").map(s => s.trim()).filter(Boolean);
+}
+
+export function isExcludedPath(p: string, excludeConfig: string): boolean {
+	const names = parseExcludeFolderNames(excludeConfig);
+	if (names.length === 0) return false;
+	const segments = p.replace(/\\/g, "/").split("/");
+	return names.some(n => segments.includes(n));
+}
+
+export function joinPath(dir: string, name: string): string {
+	const base = dir.replace(/\\/g, "/").replace(/\/+$/, "");
+	const file = name.replace(/\\/g, "/").replace(/^\/+/, "");
+	return base + "/" + file;
+}

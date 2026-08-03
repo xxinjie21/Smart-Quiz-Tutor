@@ -62,16 +62,12 @@ export interface PluginSettings {
 	lastEnabledTypes: string;
 	weakPointThreshold: number;
 	autoReviewReminder: boolean;
-	sortWrongBy: "date" | "tag" | "review";
 	extractedExamFolder: string;
 	wrongReviewIntervals: string;
 	questionReviewIntervals: string;
 	noteReviewIntervals: string;
 	noteViewFolder: string;
-	sortReviewBy: "default" | "source" | "tag" | "time";
-	questionKnowledgeFolder: string;
-	noteKnowledgeFolder: string;
-	wrongKnowledgeFolder: string;
+	knowledgeFolder: string;
 }
 
 export interface TreeNode {
@@ -84,7 +80,7 @@ export interface TreeNode {
 
 export type SectionKey = "home" | "questions" | "notes" | "wrong" | "review" | "settings";
 
-export type HomeViewKey = "default" | "filePicker" | "generate" | "answer" | "examBrowser" | "tagger";
+export type HomeViewKey = "default" | "filePicker" | "generate" | "answer" | "examBrowser" | "tagger" | "noteGen" | "history";
 
 export type SortMode = "default" | "source" | "tag" | "time";
 

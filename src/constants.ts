@@ -21,19 +21,39 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	lastEnabledTypes: "single,multi,judge,blank,essay",
 	weakPointThreshold: 2,
 	autoReviewReminder: true,
-	sortWrongBy: "date",
 	extractedExamFolder: "题目/识别试卷",
 	wrongReviewIntervals: "1,2,4,7,15,30",
 	questionReviewIntervals: "7,15,30,60,90",
-	noteReviewIntervals: "1,3,7,14,30",
+	noteReviewIntervals: "2,6,14,35,70",
 	noteViewFolder: "笔记",
-	sortReviewBy: "default",
-	questionKnowledgeFolder: "题目/知识点",
-	noteKnowledgeFolder: "笔记/知识点",
-	wrongKnowledgeFolder: "错题/知识点",
+	knowledgeFolder: "知识点",
 };
 
-export const SYSTEM_TAGS = ["错题", "题目"];
+export const SYSTEM_TAGS = ["错题", "题目", "笔记"];
+
+export interface IntervalPreset {
+	label: string;
+	values: string;
+	hint: string;
+}
+
+export const INTERVAL_PRESETS: Record<string, IntervalPreset[]> = {
+	wrong: [
+		{ label: "慢速", values: "2,5,10,20,40,60", hint: "复盘间隔长、执行省心，适合已初步掌握、仅需定期回顾的错题" },
+		{ label: "标准", values: "1,2,4,7,15,30", hint: "考前日常训练主力方案，遗忘曲线与复习节奏平衡" },
+		{ label: "快速", values: "1,1,3,5,10,20", hint: "前期隔天密集复盘，适合频繁出错的高频薄弱点" },
+	],
+	question: [
+		{ label: "慢速", values: "10,20,40,80,120", hint: "适合基础扎实、掌握牢固、几乎不会遗忘的简单题目" },
+		{ label: "标准", values: "7,15,30,60,90", hint: "覆盖范围广、周期适中，配合考研各阶段节奏" },
+		{ label: "快速", values: "4,8,18,40,60", hint: "加密前期间隔、反复强化，适合刚学完的重难点" },
+	],
+	note: [
+		{ label: "慢速", values: "3,8,20,45,80", hint: "长线缓释记忆，适合考研基础阶段按部就班的日常背诵" },
+		{ label: "标准", values: "2,6,14,35,70", hint: "中等密度、长线巩固，强化期系统性复习主力配置" },
+		{ label: "快速", values: "1,1,2,3,5", hint: "考前冲刺专用，短期高频轰炸、以速度换覆盖" },
+	],
+};
 
 export const SIDEBAR_VIEW_TYPE = "question-generator-sidebar";
 

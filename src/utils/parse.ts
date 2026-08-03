@@ -52,7 +52,6 @@ export function parseQuestions(text: string): ParsedQuestion[] {
 		current = null;
 		const ab = answerBlock[q.num];
 		if (!q.answer && ab) q.answer = ab;
-		if (!q.answer && q.opts.length === 0) return;
 		if (q.opts.length === 0 && !q.explanation && /^[A-D]{1,4}$/.test(q.qText)) return;
 		seqNum++;
 

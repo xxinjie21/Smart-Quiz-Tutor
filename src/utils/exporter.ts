@@ -20,10 +20,83 @@ function addEmptyLine(children: Paragraph[], count: number = 1) {
 	}
 }
 
+export type ExamBlock =
+	| { type: "heading"; parts: [string]; hasInline: false; level: number }
+	| { type: "question"; parts: [string]; hasInline: true }
+	| { type: "option"; parts: [string]; hasInline: true }
+	| { type: "subitem"; parts: [string]; hasInline: true }
+	| { type: "note"; parts: [string]; hasInline: true }
+	| { type: "answer"; parts: string[]; hasInline: boolean }
+	| { type: "explanation"; parts: string[]; hasInline: boolean }
+	| { type: "text"; parts: [string]; hasInline: true };
+
+const EXAM_ANSWER_LINE = /^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/;
+const EXAM_EXPLAIN_LINE = /^(?:\*\*)?解析(?:\*\*)?[：:]/;
+const EXAM_NUM_LINE = /^\d+[.、]/;
+const EXAM_HEADING_LINE = /^#{1,6}\s+/;
+
+export function parseExamBlocks(text: string): ExamBlock[] {
+	const rawLines = stripAnswerSummarySection(text).split("\n");
+	const blocks: ExamBlock[] = [];
+	let i = 0;
+	while (i < rawLines.length) {
+		const trimmed = rawLines[i]!.trim();
+		i++;
+		if (trimmed === "") continue;
+
+		if (EXAM_HEADING_LINE.test(trimmed)) {
+			const level = trimmed.match(/^(#{1,6})/)?.[1]?.length || 1;
+			blocks.push({ type: "heading", parts: [trimmed.replace(/^#{1,6}\s+/, "")], hasInline: false, level });
+			continue;
+		}
+		if (EXAM_NUM_LINE.test(trimmed)) {
+			blocks.push({ type: "question", parts: [trimmed], hasInline: true });
+			continue;
+		}
+		if (/^[A-D][.、]/.test(trimmed)) {
+			blocks.push({ type: "option", parts: [trimmed], hasInline: true });
+			continue;
+		}
+		if (/^\(\d+\)/.test(trimmed)) {
+			blocks.push({ type: "subitem", parts: [trimmed], hasInline: true });
+			continue;
+		}
+		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
+			blocks.push({ type: "note", parts: [trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim()], hasInline: true });
+			continue;
+		}
+		if (EXAM_ANSWER_LINE.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
+			const label = match ? (match[1] || "答案") + (match[2] || "：") : "答案：";
+			const inlineContent = match ? (match[3] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
+			const steps = splitAnswerContent(inlineContent);
+			const hasInline = inlineContent !== "" && steps.length <= 1;
+			blocks.push({ type: "answer", parts: hasInline ? [label + " " + inlineContent] : [label, ...steps], hasInline });
+			continue;
+		}
+		if (EXAM_EXPLAIN_LINE.test(trimmed)) {
+			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
+			const label = match ? "解析" + (match[1] || "：") : "解析：";
+			const content = match ? (match[2] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
+			const lines: string[] = [label];
+			if (content) lines.push(...splitSemantic(content));
+			while (i < rawLines.length) {
+				const next = rawLines[i]!.trim();
+				if (next === "") { i++; continue; }
+				if (EXAM_NUM_LINE.test(next) || EXAM_HEADING_LINE.test(next) || /^(答案|标准答案|参考答案)[：:]/.test(next)) break;
+				lines.push(...splitSemantic(next));
+				i++;
+			}
+			blocks.push({ type: "explanation", parts: lines, hasInline: lines.length <= 1 });
+			continue;
+		}
+		blocks.push({ type: "text", parts: [trimmed], hasInline: true });
+	}
+	return blocks;
+}
+
 // ===================== Word排版 =====================
 export function buildWordParagraphs(text: string, title?: string, source?: string): Paragraph[] {
-	const cleaned = stripAnswerSummarySection(text);
-	const rawLines = cleaned.split("\n");
 	const children: Paragraph[] = [];
 
 	if (title) {
@@ -35,28 +108,22 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 
 	let lastType = "";
 
-	for (let i = 0; i < rawLines.length; i++) {
-		const trimmed = rawLines[i]!.trim();
-		if (trimmed === "") continue;
-
-		// ── 题型标题 (## 单选题)
-		if (/^#{1,6}\s+/.test(trimmed)) {
-			const level = trimmed.match(/^(#{1,6})/)?.[1]?.length || 1;
+	for (const block of parseExamBlocks(text)) {
+		if (block.type === "heading") {
 			const headingMap: Record<number, typeof HeadingLevel[keyof typeof HeadingLevel]> = {
 				1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3,
 				4: HeadingLevel.HEADING_4, 5: HeadingLevel.HEADING_5, 6: HeadingLevel.HEADING_6,
 			};
-			children.push(new Paragraph({ text: trimmed.replace(/^#{1,6}\s+/, ""), heading: headingMap[level] || HeadingLevel.HEADING_2, spacing: { before: 160, after: 40 } }));
+			children.push(new Paragraph({ text: block.parts[0], heading: headingMap[block.level] || HeadingLevel.HEADING_2, spacing: { before: 160, after: 40 } }));
 			lastType = "heading";
 			continue;
 		}
 
-		// ── 题干 (1. xxx)
-		if (/^\d+[.、]/.test(trimmed)) {
+		if (block.type === "question") {
 			if (lastType === "explanation" || lastType === "answer" || lastType === "option") {
 				addEmptyLine(children);
 			}
-			const match = trimmed.match(/^(\d+[.、]\s*)(.*)/);
+			const match = block.parts[0].match(/^(\d+[.、]\s*)(.*)/);
 			if (match) {
 				const stemRuns: TextRun[] = [
 					new TextRun({ text: match[1]!, bold: true, font: FONT, size: FSBody }),
@@ -72,21 +139,20 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 			continue;
 		}
 
-		// ── 选项 (A. xxx)
-		if (/^[A-D][.、]/.test(trimmed)) {
+		if (block.type === "option" || block.type === "subitem") {
+			const pad = block.type === "option" ? 4 : 2;
 			pushPara(children, {
-				runs: highlightTechTerms(trimmed),
-				spacing: { before: 4, after: 4 },
+				runs: highlightTechTerms(block.parts[0]),
+				spacing: { before: pad, after: pad },
 				indent: { left: 360 }
 			});
-			lastType = "option";
+			lastType = block.type === "option" ? "option" : "answer";
 			continue;
 		}
 
-		// ── 答案子项 ((1) xxx)
-		if (/^\(\d+\)/.test(trimmed)) {
+		if (block.type === "note") {
 			pushPara(children, {
-				runs: highlightTechTerms(trimmed),
+				runs: [new TextRun({ text: block.parts[0], font: FONT, size: FSBody, italics: true, color: "666666" })],
 				spacing: { before: 2, after: 2 },
 				indent: { left: 360 }
 			});
@@ -94,98 +160,47 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 			continue;
 		}
 
-		// ── 补充说明 (> 补充说明：xxx)
-		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
-			const noteText = trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim();
-			pushPara(children, {
-				runs: [new TextRun({ text: noteText, font: FONT, size: FSBody, italics: true, color: "666666" })],
-				spacing: { before: 2, after: 2 },
-				indent: { left: 360 }
-			});
-			lastType = "answer";
-			continue;
-		}
-
-		// ── 答案：独立板块标题（绿色加粗），内容按语义拆行
-		if (/^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
-			const label = match ? (match[1] || "答案") + (match[3] || "：") : "答案：";
-			const inlineContent = match ? (match[4] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
-			const steps = splitAnswerContent(inlineContent);
-
+		if (block.type === "answer") {
 			if (lastType !== "heading" && lastType !== "") addEmptyLine(children);
 
-			if (inlineContent && steps.length <= 1) {
-				pushPara(children, {
-					runs: [new TextRun({ text: label + " " + inlineContent, bold: true, color: AnswerColor, font: FONT, size: FSBody })],
-					spacing: { before: 0, after: 0 },
-					indent: { left: 0 }
-				});
-				lastType = "answer";
-				continue;
-			}
-
 			pushPara(children, {
-				runs: [new TextRun({ text: label, bold: true, color: AnswerColor, font: FONT, size: FSBody })],
+				runs: [new TextRun({ text: block.parts[0], bold: true, color: AnswerColor, font: FONT, size: FSBody })],
 				spacing: { before: 0, after: 0 },
 				indent: { left: 0 }
 			});
 
-			for (const step of steps) {
-				pushPara(children, {
-					runs: highlightTechTerms(step),
-					spacing: { before: 2, after: 2 },
-					indent: { left: 0 }
-				});
+			if (!block.hasInline) {
+				for (const step of block.parts.slice(1)) {
+					pushPara(children, {
+						runs: highlightTechTerms(step),
+						spacing: { before: 2, after: 2 },
+						indent: { left: 0 }
+					});
+				}
 			}
 			lastType = "answer";
 			continue;
 		}
 
-		// ── 解析：蓝色标签 + 内容按语义拆行
-		if (/^(?:\*\*)?解析(?:\*\*)?[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
-			const label = match ? "解析" + (match[1] || "：") : "解析：";
-			const content = match ? (match[2] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
-			const contentLines = splitSemantic(content);
-
+		if (block.type === "explanation") {
 			pushPara(children, {
-				runs: [new TextRun({ text: label, bold: true, color: ExplainColor, font: FONT, size: FSSmall })],
+				runs: [new TextRun({ text: block.parts[0], bold: true, color: ExplainColor, font: FONT, size: FSSmall })],
 				spacing: { before: 4, after: 2 },
 				indent: { left: 0 }
 			});
-
-			for (const line of contentLines) {
+			for (const line of block.parts.slice(1)) {
 				pushPara(children, {
 					runs: highlightTechTerms(line),
 					spacing: { before: 0, after: 0 },
 					indent: { left: 0 }
 				});
 			}
-
-			let j = i + 1;
-			while (j < rawLines.length) {
-				const next = rawLines[j]!.trim();
-				if (next === "") { j++; continue; }
-				if (/^\d+[.、]/.test(next) || /^#{1,6}\s+/.test(next) || /^(答案|标准答案|参考答案)[：:]/.test(next)) break;
-				const subLines = splitSemantic(next);
-				for (const sl of subLines) {
-					pushPara(children, {
-						runs: highlightTechTerms(sl),
-						spacing: { before: 0, after: 0 },
-						indent: { left: 0 }
-					});
-				}
-				j++;
-			}
-			i = j - 1;
 			lastType = "explanation";
 			continue;
 		}
 
-		// ── 其他文字
 		pushPara(children, {
-			runs: highlightTechTerms(trimmed),
+			runs: highlightTechTerms(block.parts[0]),
 			spacing: { before: 4, after: 4 },
 			indent: { left: 0 }
 		});
@@ -196,8 +211,6 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 }
 
 export function buildExportHtml(text: string, title?: string, source?: string): string {
-	const cleaned = stripAnswerSummarySection(text);
-	const rawLines = cleaned.split("\n");
 	const dateStr = new Date().toISOString().slice(0, 10);
 	const parts: string[] = [];
 
@@ -205,26 +218,22 @@ export function buildExportHtml(text: string, title?: string, source?: string): 
 	if (source) parts.push('<p style="text-align:center;color:#999;font-size:18px;margin:0 0 4px;">来源：' + htmlEscape(source) + '　|　日期：' + dateStr + '</p>');
 
 	let lastType = "";
-	for (let i = 0; i < rawLines.length; i++) {
-		const trimmed = rawLines[i]!.trim();
-		if (trimmed === "") continue;
-
-		if (/^#{1,6}\s+/.test(trimmed)) {
-			const level = trimmed.match(/^(#{1,6})/)?.[1]?.length || 1;
-			const tag = level <= 2 ? "h2" : "h3";
-			const style = level <= 2
+	for (const block of parseExamBlocks(text)) {
+		if (block.type === "heading") {
+			const tag = block.level <= 2 ? "h2" : "h3";
+			const style = block.level <= 2
 				? 'font-size:21px;font-weight:600;color:#1a5276;margin:16px 0 6px;padding-bottom:3px;border-bottom:1.5px solid #3498db;'
 				: 'font-size:20px;font-weight:600;color:#2c3e50;margin:12px 0 4px;';
-			parts.push('<' + tag + ' style="' + style + '">' + highlightTechHtml(htmlEscape(trimmed.replace(/^#{1,6}\s+/, ''))) + '</' + tag + '>');
+			parts.push('<' + tag + ' style="' + style + '">' + highlightTechHtml(htmlEscape(block.parts[0])) + '</' + tag + '>');
 			lastType = "heading";
 			continue;
 		}
 
-		if (/^\d+[.、]/.test(trimmed)) {
+		if (block.type === "question") {
 			if (lastType === "explanation" || lastType === "answer" || lastType === "option") {
 				parts.push('<div style="height:8px;"></div>');
 			}
-			const match = trimmed.match(/^(\d+[.、]\s*)(.*)/);
+			const match = block.parts[0].match(/^(\d+[.、]\s*)(.*)/);
 			if (match) {
 				parts.push('<p style="margin:' + (lastType === "heading" ? "2px" : "6px") + ' 0;font-size:20px;line-height:1.7;"><strong>' + htmlEscape(match[1]!) + '</strong>' + highlightTechHtml(htmlEscape(match[2]!)) + '</p>');
 			}
@@ -232,76 +241,40 @@ export function buildExportHtml(text: string, title?: string, source?: string): 
 			continue;
 		}
 
-		if (/^[A-D][.、]/.test(trimmed)) {
-			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;">' + highlightTechHtml(htmlEscape(trimmed)) + '</p>');
-			lastType = "option";
+		if (block.type === "option" || block.type === "subitem") {
+			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;">' + highlightTechHtml(htmlEscape(block.parts[0])) + '</p>');
+			lastType = block.type === "option" ? "option" : "answer";
 			continue;
 		}
 
-		if (/^\(\d+\)/.test(trimmed)) {
-			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;">' + highlightTechHtml(htmlEscape(trimmed)) + '</p>');
+		if (block.type === "note") {
+			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;font-style:italic;color:#666;">' + highlightTechHtml(htmlEscape(block.parts[0])) + '</p>');
 			lastType = "answer";
 			continue;
 		}
 
-		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
-			const noteText = trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim();
-			parts.push('<p style="margin:1px 0 1px 24px;font-size:19px;line-height:1.6;font-style:italic;color:#666;">' + highlightTechHtml(htmlEscape(noteText)) + '</p>');
-			lastType = "answer";
-			continue;
-		}
-
-		if (/^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
-			const label = match ? (match[1] || "答案") + (match[3] || "：") : "答案：";
-			const inlineContent = match ? (match[4] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
-			const steps = splitAnswerContent(inlineContent);
-
+		if (block.type === "answer") {
 			if (lastType !== "heading" && lastType !== "") parts.push('<div style="height:8px;"></div>');
-
-			if (inlineContent && steps.length <= 1) {
-				parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;"><strong style="color:#2E7D32;">' + htmlEscape(label + " " + inlineContent) + '</strong></p>');
-				lastType = "answer";
-				continue;
-			}
-
-			parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;"><strong style="color:#2E7D32;">' + htmlEscape(label) + '</strong></p>');
-
-			for (const step of steps) {
-				parts.push('<p style="margin:1px 0;font-size:20px;line-height:1.7;">' + highlightTechHtml(htmlEscape(step)) + '</p>');
+			parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;"><strong style="color:#2E7D32;">' + htmlEscape(block.parts[0]!) + '</strong></p>');
+			if (!block.hasInline) {
+				for (const step of block.parts.slice(1)) {
+					parts.push('<p style="margin:1px 0;font-size:20px;line-height:1.7;">' + highlightTechHtml(htmlEscape(step)) + '</p>');
+				}
 			}
 			lastType = "answer";
 			continue;
 		}
 
-		if (/^(?:\*\*)?解析(?:\*\*)?[：:]/.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
-			const label = match ? "解析" + (match[1] || "：") : "解析：";
-			const content = match ? (match[2] || "").trim() : "";
-			const contentLines = splitSemantic(content);
-
-			parts.push('<p style="margin:2px 0;font-size:19px;line-height:1.7;"><strong style="color:#1565C0;">' + htmlEscape(label) + '</strong></p>');
-			for (const line of contentLines) {
+		if (block.type === "explanation") {
+			parts.push('<p style="margin:2px 0;font-size:19px;line-height:1.7;"><strong style="color:#1565C0;">' + htmlEscape(block.parts[0]!) + '</strong></p>');
+			for (const line of block.parts.slice(1)) {
 				parts.push('<p style="margin:0;font-size:19px;line-height:1.7;">' + highlightTechHtml(htmlEscape(line)) + '</p>');
 			}
-
-			let j = i + 1;
-			while (j < rawLines.length) {
-				const next = rawLines[j]!.trim();
-				if (next === "") { j++; continue; }
-				if (/^\d+[.、]/.test(next) || /^#{1,6}\s+/.test(next) || /^(答案|标准答案|参考答案)[：:]/.test(next)) break;
-				const subLines = splitSemantic(next);
-				for (const sl of subLines) {
-					parts.push('<p style="margin:0;font-size:19px;line-height:1.7;">' + highlightTechHtml(htmlEscape(sl)) + '</p>');
-				}
-				j++;
-			}
-			i = j - 1;
 			lastType = "explanation";
 			continue;
 		}
 
-		parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;">' + highlightTechHtml(htmlEscape(trimmed)) + '</p>');
+		parts.push('<p style="margin:2px 0;font-size:20px;line-height:1.7;">' + highlightTechHtml(htmlEscape(block.parts[0])) + '</p>');
 		lastType = "text";
 	}
 

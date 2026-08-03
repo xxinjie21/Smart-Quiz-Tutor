@@ -6,13 +6,13 @@ import * as path from "path";
 import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, WRONG_NOTES_CACHE_TTL_MS } from "./constants";
 import type { HistoryEntry, WrongAnswerNote, PluginSettings } from "./types";
 import { parseFM, buildFM } from "./utils/frontmatter";
-import { isAbs, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, EXAM_SOURCE_EXTS } from "./utils/fs-utils";
+import { isAbs, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, EXAM_SOURCE_EXTS, isExcludedPath, joinPath } from "./utils/fs-utils";
 import { safeName } from "./utils/text";
 import { isDueForReview } from "./utils/review";
 import { stripAnswerSummarySection } from "./utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "./utils/exporter";
 import { getElectronRemote } from "./utils/electron";
-import { KnowledgeService } from "./services/knowledgeService";
+import { KnowledgeService, type IndexSource } from "./services/knowledgeService";
 import { MainSidebarView } from "./views/sidebarView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
 
@@ -25,7 +25,15 @@ export default class QuestionGeneratorPlugin extends Plugin {
 
 	async loadSettings() {
 		const data = await this.loadData() as { history?: HistoryEntry[]; wrongAnswers?: { timestamp?: number; fileName?: string; note?: string; resultText?: string }[] } | null;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+		const raw = data ? { ...data } as Record<string, unknown> : {};
+		delete raw.questionKnowledgeFolder;
+		delete raw.noteKnowledgeFolder;
+		delete raw.wrongKnowledgeFolder;
+		const legacyKf = ["题目/知识点", "笔记/知识点", "错题/知识点", "错题本/知识点"];
+		if (typeof raw.knowledgeFolder === "string" && legacyKf.includes(raw.knowledgeFolder)) {
+			raw.knowledgeFolder = DEFAULT_SETTINGS.knowledgeFolder;
+		}
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		if (data?.history) this.history = data.history;
 	}
 	rootPath(subFolder: string): string {
@@ -58,7 +66,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				const content = fm + (old.resultText || "");
 				const fileName = safeName(old.fileName || "未知") + "_错题_" + dateStr + "_" + migrated + ".md";
 				try {
-					if (isAbs(folder)) writeFileStr(folder + "\\" + fileName, content);
+					if (isAbs(folder)) writeFileStr(joinPath(folder, fileName), content);
 					else await this.app.vault.create(folder + "/" + fileName, content);
 					migrated++;
 				} catch { /* empty */ }
@@ -82,10 +90,6 @@ export default class QuestionGeneratorPlugin extends Plugin {
 
 	emitDataChanged() { this.invalidateCache(); for (const cb of this._refreshCallbacks) { try { cb(); } catch { /* empty */ } } }
 
-	async updateKnowledgePointMOC(tags: string[], noteFileName: string) {
-		return this.knowledgeService.updateKnowledgePointMOC(tags, noteFileName);
-	}
-
 	async loadAllWrongNotes(forceRefresh = false): Promise<WrongAnswerNote[]> {
 		const now = Date.now();
 		if (!forceRefresh && this._wrongNotesCache && (now - this._cacheTime < WRONG_NOTES_CACHE_TTL_MS)) {
@@ -93,21 +97,22 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}
 		const notes: WrongAnswerNote[] = [];
 		const folder = this.rootPath(this.settings.wrongBookFolder);
+		const excludes = this.settings.excludeFolders || "";
 		if (isAbs(folder)) {
 			ensureFolderAbs(folder);
-			for (const f of listMdFiles(folder)) {
-				const { meta, body } = parseFM(readFileStr(folder + "/" + f));
-				notes.push({ filePath: folder + "/" + f, baseName: f.replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 1 });
+			for (const f of listMdFilesRecursive(folder)) {
+				const fp = f.replace(/\\/g, "/");
+				if (isExcludedPath(fp, excludes)) continue;
+				const { meta, body } = parseFM(readFileStr(fp));
+				notes.push({ filePath: fp, baseName: path.basename(fp).replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 1 });
 			}
 		} else {
-			const folderFile = this.app.vault.getAbstractFileByPath(folder);
-			if (folderFile instanceof TFolder) {
-				for (const child of folderFile.children) {
-					if (child instanceof TFile && child.extension === "md") {
-						const { meta, body } = parseFM(await this.app.vault.read(child));
-						notes.push({ filePath: child.path, baseName: child.basename, date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 1 });
-					}
-				}
+			const prefix = folder.endsWith("/") ? folder : folder + "/";
+			for (const child of this.app.vault.getFiles()) {
+				if (child.extension !== "md" || !child.path.startsWith(prefix)) continue;
+				if (isExcludedPath(child.path, excludes)) continue;
+				const { meta, body } = parseFM(await this.app.vault.read(child));
+				notes.push({ filePath: child.path, baseName: child.basename, date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 1 });
 			}
 		}
 		this._wrongNotesCache = notes;
@@ -117,20 +122,23 @@ export default class QuestionGeneratorPlugin extends Plugin {
 
 	async loadAllQuestionFilesForReview(): Promise<WrongAnswerNote[]> {
 		const folder = this.rootPath(this.settings.questionFolder);
-		const excludes = [this.rootPath(this.settings.questionKnowledgeFolder), this.rootPath(this.settings.noteKnowledgeFolder), this.rootPath(this.settings.wrongKnowledgeFolder)].filter(Boolean);
+		const excludes = [this.rootPath(this.settings.knowledgeFolder)].filter(Boolean);
+		const excludeCfg = this.settings.excludeFolders || "";
 		const notes: WrongAnswerNote[] = [];
 		if (isAbs(folder)) {
 			ensureFolderAbs(folder);
 			for (const f of listMdFilesRecursive(folder, excludes)) {
-				const { meta, body } = parseFM(readFileStr(f));
-				notes.push({ filePath: f, baseName: path.basename(f).replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
+				const fp = f.replace(/\\/g, "/");
+				if (isExcludedPath(fp, excludeCfg)) continue;
+				const { meta, body } = parseFM(readFileStr(fp));
+				notes.push({ filePath: fp, baseName: path.basename(fp).replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
 			}
 		} else {
 			const folderFile = this.app.vault.getAbstractFileByPath(folder);
 			if (folderFile instanceof TFolder) {
 				const prefix = folder.endsWith("/") ? folder : folder + "/";
 				const exclPrefixes = excludes.map(p => (p.endsWith("/") ? p : p + "/"));
-				const children = this.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e)));
+				const children = this.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e)) && !isExcludedPath(f.path, excludeCfg));
 				for (const child of children) {
 					const { meta, body } = parseFM(await this.app.vault.read(child));
 					notes.push({ filePath: child.path, baseName: child.basename, date: (meta.date as string) || "", sourceFile: (meta.source as string) || "", sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
@@ -142,23 +150,24 @@ export default class QuestionGeneratorPlugin extends Plugin {
 
 	async loadAllVaultNotesForReview(): Promise<WrongAnswerNote[]> {
 		const folder = this.rootPath(this.settings.noteViewFolder);
+		const excludeCfg = this.settings.excludeFolders || "";
 		const notes: WrongAnswerNote[] = [];
 		if (!folder) return notes;
 		if (isAbs(folder)) {
 			ensureFolderAbs(folder);
-			for (const f of listMdFiles(folder)) {
-				const { meta, body } = parseFM(readFileStr(folder + "/" + f));
-				notes.push({ filePath: folder + "/" + f, baseName: f.replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || f.replace(/\.md$/, ""), sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
+			for (const f of listMdFilesRecursive(folder)) {
+				const fp = f.replace(/\\/g, "/");
+				if (isExcludedPath(fp, excludeCfg)) continue;
+				const { meta, body } = parseFM(readFileStr(fp));
+				notes.push({ filePath: fp, baseName: path.basename(fp).replace(/\.md$/, ""), date: (meta.date as string) || "", sourceFile: (meta.source as string) || path.basename(fp).replace(/\.md$/, ""), sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
 			}
 		} else {
-			const folderFile = this.app.vault.getAbstractFileByPath(folder);
-			if (folderFile instanceof TFolder) {
-				for (const child of folderFile.children) {
-					if (child instanceof TFile && child.extension === "md") {
-						const { meta, body } = parseFM(await this.app.vault.read(child));
-						notes.push({ filePath: child.path, baseName: child.basename, date: (meta.date as string) || "", sourceFile: (meta.source as string) || child.basename, sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
-					}
-				}
+			const prefix = folder.endsWith("/") ? folder : folder + "/";
+			for (const child of this.app.vault.getFiles()) {
+				if (child.extension !== "md" || !child.path.startsWith(prefix)) continue;
+				if (isExcludedPath(child.path, excludeCfg)) continue;
+				const { meta, body } = parseFM(await this.app.vault.read(child));
+				notes.push({ filePath: child.path, baseName: child.basename, date: (meta.date as string) || "", sourceFile: (meta.source as string) || child.basename, sourcePath: (meta.sourcePath as string) || "", tags: Array.isArray(meta.tags) ? meta.tags : [], resultText: body, note: (meta.note as string) || "", nextReview: (meta.nextReview as string) || "", interval: typeof meta.interval === "number" ? meta.interval : 1, correctCount: typeof meta.correctCount === "number" ? meta.correctCount : 0, wrongCount: typeof meta.wrongCount === "number" ? meta.wrongCount : 0 });
 			}
 		}
 		return notes;
@@ -168,8 +177,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		return this.knowledgeService.loadExistingKnowledgeTags();
 	}
 
-	async syncKnowledgeFolder(tags: string[], links: { label: string; path: string }[], folderOverride?: string) {
-		return this.knowledgeService.syncKnowledgeFolder(tags, links, folderOverride);
+	async syncKnowledgeFolder(tags: string[], links: { label: string; path: string }[], source: IndexSource = "错题", folderOverride?: string) {
+		return this.knowledgeService.syncKnowledgeFolder(tags, links, source, folderOverride);
 	}
 
 	async rebuildKnowledgeIndex() {
@@ -184,7 +193,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			if (file instanceof TFile) await this.app.fileManager.trashFile(file);
 		}
 		this.invalidateCache();
-		void this.rebuildKnowledgeIndex();
+		await this.rebuildKnowledgeIndex();
 	}
 
 	async getWeakPoints(): Promise<{ tag: string; count: number; questions: WrongAnswerNote[] }[]> {
@@ -245,12 +254,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			await ensureFolder(this.app, this.rootPath(this.settings.wrongBookFolder));
 			await ensureFolder(this.app, this.rootPath(this.settings.noteViewFolder));
 			await ensureFolder(this.app, this.rootPath(this.settings.extractedExamFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.questionKnowledgeFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.noteKnowledgeFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.wrongKnowledgeFolder));
+			await ensureFolder(this.app, this.rootPath(this.settings.knowledgeFolder));
 			if (this.settings.convertedMdFolder) await ensureFolder(this.app, this.rootPath(this.settings.convertedMdFolder));
-			await this.migrateOldWrongAnswers();
-			await this.migrateKnowledgeLinks();
 		} catch (err) {
 			console.error("[question-generator] 启动初始化错误:", err);
 		}
@@ -278,6 +283,12 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					await leaf.setViewState({ type: SIDEBAR_VIEW_TYPE, active: true });
 				}
 			}
+			void (async () => {
+				try {
+					await this.migrateOldWrongAnswers();
+					await this.migrateKnowledgeLinks();
+				} catch { /* empty */ }
+			})();
 			if (this.settings.autoReviewReminder) {
 				try {
 					const notes = await this.loadAllWrongNotes();
@@ -302,13 +313,13 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}});
 		this.addCommand({ id: "view-history", name: "查看题目生成历史记录", callback: async () => {
 			const view = await this.activateSidebar();
-			if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
+			if (view) { view.activeSection = "home"; view.homeView = "history"; await view.render(); }
 		}});
 		this.addCommand({ id: "view-wrong-answers", name: "查看错题本", callback: async () => {
 			const view = await this.activateSidebar();
 			if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
 		}});
-		this.addCommand({ id: "rebuild-knowledge-index", name: "重建知识点索引", callback: async () => { await this.migrateKnowledgeLinks(); new Notice("知识点索引已重建"); } });
+		this.addCommand({ id: "rebuild-knowledge-index", name: "重建知识点索引", callback: async () => { await this.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); } });
 		this.addCommand({
 			id: "generate-from-current",
 			name: "基于当前文档生成试题",
@@ -333,7 +344,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				if (file instanceof TFolder) {
 					menu.addItem(item => item.setTitle("选择文件生成题目").onClick(async () => {
 						const view = await this.activateSidebar();
-						if (view) { view.activeSection = "home"; view.openGeneratePicker(); }
+						if (view) { view.activeSection = "home"; view.openGeneratePicker(file.path); }
 					}));
 				}
 				if (file instanceof TFile) {
@@ -394,17 +405,11 @@ export default class QuestionGeneratorPlugin extends Plugin {
 							const view = await this.activateSidebar();
 							if (view) { view.activeSection = "home"; view.homeView = "generate"; view.genSourceText = text; view.genFileName = file.name; view.genSourcePath = file.path; await view.render(); }
 						}).catch(e => console.error("[question-generator]", e));
-					} else {
-						new Notice("请先打开一个Markdown文档再使用 Ctrl+Q");
-					}
+				} else {
+					new Notice("请先打开一个Markdown文档再使用 Ctrl+Q");
 				}
-				if (evt.ctrlKey && evt.key === "w") {
-					evt.preventDefault();
-					this.activateSidebar().then(async view => {
-						if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
-					}).catch(e => console.error("[question-generator]", e));
-				}
-			} catch (e) {
+			}
+		} catch (e) {
 				console.error("[question-generator] keydown error:", e);
 			}
 		});
@@ -418,7 +423,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 // ===================== 公共导出（保持向后兼容） =====================
 export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE } from "./constants";
 export { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
-export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder } from "./utils/fs-utils";
+export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
 export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, htmlEscape } from "./utils/text";
 export { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate, todayStr, isDueForReview } from "./utils/review";
 export { stripMd, parseQuestions } from "./utils/parse";
@@ -426,11 +431,12 @@ export { extractKnowledgeTags } from "./utils/tags";
 export { debounce } from "./utils/debounce";
 export { buildFileTree } from "./utils/filetree";
 export { stripAnswerSummarySection, splitSemantic, normalizeAnswerSteps, splitAnswerContent, fixSequentialNumbers, normalizeExamContent, highlightTechTerms, highlightTechHtml } from "./utils/layout";
-export { buildWordParagraphs, buildExportHtml, exportPdfDirect } from "./utils/exporter";
+export { buildWordParagraphs, buildExportHtml, parseExamBlocks, exportPdfDirect } from "./utils/exporter";
 export { getElectronRemote } from "./utils/electron";
 export { chatLLM } from "./services/llmService";
-export { buildExamExtractPrompt, buildGeneratePrompt, parseTypeSpec, parseAITagsFromResult, buildExamFrontmatter, mergeExamChunks } from "./services/questionService";
+export { buildExamExtractPrompt, buildGeneratePrompt, parseTypeSpec, parseAITagsFromResult, mergeExamChunks } from "./services/questionService";
 export { KnowledgeService, buildTaggingPrompt, parseTaggedResult } from "./services/knowledgeService";
+export { convertDocumentToText, stripRtf, htmlToMarkdown } from "./services/documentService";
 export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource } from "./types";
 export { MainSidebarView } from "./views/sidebarView";
 export { QuestionGeneratorSettingTab } from "./views/settingTab";
