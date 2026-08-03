@@ -78,6 +78,21 @@ if (prod) {
 		'$1'
 	);
 
+	// 3. Remove the `setimmediate` package's dynamic <script> injection used as a
+	//    browser async scheduler. Obsidian's ESLint rejects any dynamic
+	//    `document.createElement("script")`, even if the branch is never hit at
+	//    runtime. Collapse the whole ternary to its setTimeout fallback and
+	//    neutralize the dead `function m(){...}` scheduler.
+	const SCRIPT_RE = /createElement\(["']script["']\)/g;
+	const hasScriptInjection = SCRIPT_RE.test(code);
+	SCRIPT_RE.lastIndex = 0;
+	if (hasScriptInjection) {
+		// setimmediate: "document"in global&&"onreadystatechange"in global.document.createElement("script") ? injectScript :setTimeout fallback
+		code = code.replace(/\):"document"in global&&"onreadystatechange"in global\.document\.createElement\("script"\)\?[\s\S]{0,700}?ax=function\(\)\{setTimeout\((\w+),0\)\}/, '):ax=function(){setTimeout($1,0)}');
+		// setimmediate: dead `function m(){... a.createElement("script") ...}` never wired into the scheduler chain
+		code = code.replace(/function m\(\)\{var v=\w+\.documentElement;[\s\S]{0,300}?\w+\.createElement\("script"\)[\s\S]{0,300}?\}\}/, 'function m(){}');
+	}
+
 	writeFileSync('main.js', code);
 	process.exit(0);
 } else {
