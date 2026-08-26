@@ -26,6 +26,7 @@ import { chatLLM, type ChatLLMOptions } from "../services/llmService";
 import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, mergeExamChunks } from "../services/questionService";
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 import { buildNotePrompt, parseNoteResult, buildNoteFrontmatter, type NoteGenSourceType } from "../services/noteService";
+import { t, tf } from "../i18n/index";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
@@ -113,7 +114,7 @@ export class MainSidebarView extends ItemView {
 	notePickerExpanded: Set<string> = new Set();
 
 	getViewType() { return SIDEBAR_VIEW_TYPE; }
-	getDisplayText() { return "智学助手"; }
+	getDisplayText() { return t("智学助手"); }
 	getIcon() { return "pencil"; }
 
 	constructor(leaf: WorkspaceLeaf, plugin: QuestionGeneratorPlugin) {
@@ -144,16 +145,16 @@ export class MainSidebarView extends ItemView {
 			container.empty();
 
 			const header = container.createDiv({ cls: "qg-header", attr: { style: "padding:14px 16px 10px;" } });
-			header.createDiv({ text: "智学助手", attr: { style: "font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
+			header.createDiv({ text: t("智学助手"), attr: { style: "font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
 
 			const nav = container.createDiv({ cls: "qg-nav", attr: { style: "display:flex;margin:0 14px 12px;" } });
 			const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "settings"; label: string; icon: string }[] = [
-				{ key: "home", label: "首页", icon: "🏠" },
-				{ key: "questions", label: "题目", icon: "📝" },
-				{ key: "notes", label: "笔记", icon: "📋" },
-				{ key: "wrong", label: "错题", icon: "❌" },
-				{ key: "review", label: "复习", icon: "📊" },
-				{ key: "settings", label: "设置", icon: "⚙️" },
+				{ key: "home", label: t("首页"), icon: "🏠" },
+				{ key: "questions", label: t("题目"), icon: "📝" },
+				{ key: "notes", label: t("笔记"), icon: "📋" },
+				{ key: "wrong", label: t("错题"), icon: "❌" },
+				{ key: "review", label: t("复习"), icon: "📊" },
+				{ key: "settings", label: t("设置"), icon: "⚙️" },
 			];
 			this.navButtons.clear();
 			for (const item of navItems) {
@@ -314,12 +315,12 @@ export class MainSidebarView extends ItemView {
 
 		// Header: title + year select + Less/More legend (GitHub layout)
 		const header = container.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;" } });
-		header.createDiv({ text: "学习热力图", attr: { style: "font-size:16px;font-weight:700;color:var(--text-normal);" } });
+		header.createDiv({ text: t("学习热力图"), attr: { style: "font-size:16px;font-weight:700;color:var(--text-normal);" } });
 		header.createDiv({ attr: { style: "flex:1;" } });
 		const years = Array.from(new Set(Object.keys(activity).map(k => k.slice(0, 4)))).filter(y => /^\d{4}$/.test(y)).sort().reverse();
 		const sel = header.createEl("select", { attr: { style: "font-size:13px;padding:2px 6px;border-radius:6px;background:transparent;color:var(--text-normal);border:1px solid var(--background-modifier-border);max-width:110px;" } });
-		sel.createEl("option", { text: "近一年", attr: { value: "" } });
-		for (const y of years) sel.createEl("option", { text: y + " 年", attr: { value: y } });
+		sel.createEl("option", { text: t("近一年"), attr: { value: "" } });
+		for (const y of years) sel.createEl("option", { text: tf("{y} 年", { y }), attr: { value: y } });
 		sel.value = year;
 		sel.addEventListener("change", () => {
 			this.heatmapYear = sel.value;
@@ -332,13 +333,13 @@ export class MainSidebarView extends ItemView {
 		}
 		legend.createSpan({ text: "More" });
 
-		container.createDiv({ text: (yearNum > 0 ? year + "年" : "过去一年") + "共 " + totalActivities + " 次学习活动，" + activeDays + " 天有记录", attr: { style: "color:var(--text-muted);font-size:12px;margin-bottom:8px;" } });
+		container.createDiv({ text: (yearNum > 0 ? tf("{y}年", { y: yearNum }) : t("过去一年")) + tf("共 {n} 次学习活动，{d} 天有记录", { n: totalActivities, d: activeDays }), attr: { style: "color:var(--text-muted);font-size:12px;margin-bottom:8px;" } });
 
 		const wrap = container.createDiv({ attr: { style: "overflow-x:auto;padding-right:12px;" } });
 		const outer = wrap.createDiv({ attr: { style: "display:inline-flex;gap:0;" } });
 
 		const dayCol = outer.createDiv({ attr: { style: "width:" + DAY_LABEL_W + "px;padding-top:" + MONTH_LABEL_H + "px;" } });
-		const dayLabels = ["", "一", "", "三", "", "五", ""];
+		const dayLabels = ["", t("一"), "", t("三"), "", t("五"), ""];
 		for (const dl of dayLabels) {
 			const row = dayCol.createDiv({ attr: { style: "height:" + STEP + "px;display:flex;align-items:center;justify-content:flex-end;padding-right:3px;font-size:10px;color:var(--text-muted);" } });
 			row.setText(dl);
@@ -364,7 +365,6 @@ export class MainSidebarView extends ItemView {
 
 		const grid = right.createDiv({ attr: { style: "position:relative;width:" + GRID_W + "px;height:" + GRID_H + "px;" } });
 
-		const monthNamesCN = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 		for (let col = 0; col < WEEKS; col++) {
 			for (let row = 0; row < 7; row++) {
 				const d = new Date(startDate);
@@ -377,11 +377,11 @@ export class MainSidebarView extends ItemView {
 
 				const cell = grid.createDiv({ attr: { style: "position:absolute;width:" + CELL + "px;height:" + CELL + "px;border-radius:2px;left:" + (col * STEP) + "px;top:" + (row * STEP) + "px;background:" + cellColor(level) + ";outline:1px solid var(--qg-heat-outline);outline-offset:-1px;cursor:default;" } });
 
-				const dateLabel = monthNamesCN[d.getMonth()]! + d.getDate() + "日";
-				cell.setAttribute("title", (val > 0 ? val + " 次学习活动 · " : "无活动 · ") + dateLabel);
+				const dateLabel = tf("{m}月{d}日", { m: d.getMonth() + 1, d: d.getDate() });
+				cell.setAttribute("title", (val > 0 ? tf("{n} 次学习活动 · ", { n: val }) : t("无活动 · ")) + dateLabel);
 
 				if (ds === todayStr) {
-					cell.setAttribute("title", cell.getAttribute("title") + " (今天)");
+					cell.setAttribute("title", cell.getAttribute("title") + t(" (今天)"));
 					cell.createDiv({ attr: { style: "position:absolute;inset:-1px;border-radius:2px;outline:1px solid var(--text-normal);" } });
 				}
 			}
@@ -417,13 +417,13 @@ export class MainSidebarView extends ItemView {
 			c.createDiv({ text: label, attr: { style: "color:var(--text-muted);font-size:17px;margin-top:2px;" } });
 			return c;
 		};
-		const qCard = miniCard("题目", String(stats.questionCount), stats.questionCount > 0 ? "var(--interactive-accent)" : undefined);
+		const qCard = miniCard(t("题目"), String(stats.questionCount), stats.questionCount > 0 ? "var(--interactive-accent)" : undefined);
 		qCard.addEventListener("click", () => { this.activeSection = "questions"; void this.render(); });
-		const nCard = miniCard("笔记", String(stats.noteCount), stats.noteCount > 0 ? "var(--color-green)" : undefined);
+		const nCard = miniCard(t("笔记"), String(stats.noteCount), stats.noteCount > 0 ? "var(--color-green)" : undefined);
 		nCard.addEventListener("click", () => { this.activeSection = "notes"; void this.render(); });
-		const dueCard = miniCard("待复习", String(stats.dueCount), stats.dueCount > 0 ? "var(--color-orange)" : undefined);
+		const dueCard = miniCard(t("待复习"), String(stats.dueCount), stats.dueCount > 0 ? "var(--color-orange)" : undefined);
 		dueCard.addEventListener("click", () => { this.activeSection = "review"; void this.render(); });
-		const wCard = miniCard("错题", String(stats.totalWrong), stats.totalWrong > 0 ? "var(--color-red)" : undefined);
+		const wCard = miniCard(t("错题"), String(stats.totalWrong), stats.totalWrong > 0 ? "var(--color-red)" : undefined);
 		wCard.addEventListener("click", () => { this.activeSection = "wrong"; this.wrongView = "list"; void this.render(); });
 
 		const heatmapSection = el.createDiv({ cls: "qg-section-card", attr: { style: "margin-bottom:16px;padding:14px;border-radius:16px;overflow:hidden;" } });
@@ -431,14 +431,14 @@ export class MainSidebarView extends ItemView {
 		this.renderHeatmap(heatmapSection, heatmapData, this.heatmapYear);
 
 		const actSection = el.createDiv({ attr: { style: "margin-bottom:14px;" } });
-		actSection.createDiv({ text: "快捷操作", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
+		actSection.createDiv({ text: t("快捷操作"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 
 		const actions = [
-			{ label: "📝 选择文件生成题目", desc: "让AI根据文档内容创作新题目存入题库", action: () => this.openGeneratePicker() },
-			{ label: "🎯 薄弱点生成题目", desc: "针对薄弱知识点", badge: stats.weakCount > 0 ? String(stats.weakCount) : undefined, action: async () => { await this.generateFromWeakPoints(); } },
-			{ label: "📋 AI识别试卷", desc: "提取文档中已有题目，保存后直接答题", action: () => { this.homeView = "examBrowser"; void this.renderHomeTab(); } },
-			{ label: "🏷️ AI添加标签", desc: "AI识别知识点并写入frontmatter，用于知识图谱", action: () => { this.taggerMode = "current"; this.fpSelected.clear(); this.fpAllFiles = []; this.homeView = "tagger"; void this.renderHomeTab(); } },
-			{ label: "🤖 AI生成笔记", desc: "对当前文件或从文件/题目/错题/笔记生成浓缩知识点笔记", action: () => { this.noteGenSourceType = "doc"; this.noteGenSelected.clear(); this.noteGenResultText = ""; this.noteGenMode = "picker"; this.homeView = "noteGen"; void this.renderHomeTab(); } },
+			{ label: t("📝 选择文件生成题目"), desc: t("让AI根据文档内容创作新题目存入题库"), action: () => this.openGeneratePicker() },
+			{ label: t("🎯 薄弱点生成题目"), desc: t("针对薄弱知识点"), badge: stats.weakCount > 0 ? String(stats.weakCount) : undefined, action: async () => { await this.generateFromWeakPoints(); } },
+			{ label: t("📋 AI识别试卷"), desc: t("提取文档中已有题目，保存后直接答题"), action: () => { this.homeView = "examBrowser"; void this.renderHomeTab(); } },
+			{ label: t("🏷️ AI添加标签"), desc: t("AI识别知识点并写入frontmatter，用于知识图谱"), action: () => { this.taggerMode = "current"; this.fpSelected.clear(); this.fpAllFiles = []; this.homeView = "tagger"; void this.renderHomeTab(); } },
+			{ label: t("🤖 AI生成笔记"), desc: t("对当前文件或从文件/题目/错题/笔记生成浓缩知识点笔记"), action: () => { this.noteGenSourceType = "doc"; this.noteGenSelected.clear(); this.noteGenResultText = ""; this.noteGenMode = "picker"; this.homeView = "noteGen"; void this.renderHomeTab(); } },
 		];
 		for (const act of actions) {
 			const row = el.createDiv({ cls: "qg-action-row" });
@@ -452,8 +452,8 @@ export class MainSidebarView extends ItemView {
 		if (stats.dueCount > 0) {
 			const reviewSection = el.createDiv({ cls: "qg-review-banner", attr: { style: "padding:14px 16px;border-radius:16px;margin-bottom:16px;" } });
 			const reviewHeader = reviewSection.createDiv({ attr: { style: "display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;" } });
-			reviewHeader.createDiv({ text: "今日待复习 " + stats.dueCount + " 题", attr: { style: "font-weight:600;font-size:18px;" } });
-			const goBtn = reviewHeader.createSpan({ text: "去复习", attr: { style: "padding:3px 12px;border-radius:999px;background:var(--interactive-accent);color:var(--text-on-accent);cursor:pointer;font-size:14px;font-weight:600;" } });
+			reviewHeader.createDiv({ text: tf("今日待复习 {n} 题", { n: stats.dueCount }), attr: { style: "font-weight:600;font-size:18px;" } });
+			const goBtn = reviewHeader.createSpan({ text: t("去复习"), attr: { style: "padding:3px 12px;border-radius:999px;background:var(--interactive-accent);color:var(--text-on-accent);cursor:pointer;font-size:14px;font-weight:600;" } });
 			goBtn.addEventListener("click", () => { this.activeSection = "review"; void this.render(); });
 			const dueNotes = await this.getDueNotes();
 			const shown = dueNotes.slice(0, PREVIEW_ITEMS_LIMIT);
@@ -462,32 +462,32 @@ export class MainSidebarView extends ItemView {
 				const isLast = i === shown.length - 1;
 				const row = reviewSection.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;padding:8px 0;" + (isLast ? "" : "border-bottom:1px solid color-mix(in srgb, var(--qg-border) 60%, transparent);") } });
 				row.createSpan({ text: (note.sourceFile || note.baseName).replace(/\[\[|\]\]/g, ""), attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;" } });
-				const btn = row.createSpan({ text: "复习", attr: { style: "padding:3px 10px;border-radius:999px;background:var(--interactive-accent);color:var(--text-on-accent);cursor:pointer;font-size:14px;font-weight:600;flex-shrink:0;" } });
+				const btn = row.createSpan({ text: t("复习"), attr: { style: "padding:3px 10px;border-radius:999px;background:var(--interactive-accent);color:var(--text-on-accent);cursor:pointer;font-size:14px;font-weight:600;flex-shrink:0;" } });
 				btn.addEventListener("click", () => {
 					if (item.source === "wrong") { this.activeSection = "wrong"; this.wrongView = "detail"; this.wrongCurrentNote = note; void this.render(); }
 					else { void this.app.workspace.openLinkText(note.baseName, "", false); }
 				});
 			});
-			if (stats.dueCount > shown.length) reviewSection.createDiv({ text: "还有 " + (stats.dueCount - shown.length) + " 题...", attr: { style: "font-size:14px;color:var(--text-muted);padding-top:8px;" } });
+			if (stats.dueCount > shown.length) reviewSection.createDiv({ text: tf("还有 {n} 题...", { n: stats.dueCount - shown.length }), attr: { style: "font-size:14px;color:var(--text-muted);padding-top:8px;" } });
 		}
 
 		const toolsSection = el.createDiv({ attr: { style: "margin-top:10px;" } });
-		toolsSection.createDiv({ text: "数据维护", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:0.5px;" } });
+		toolsSection.createDiv({ text: t("数据维护"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 		const kmRow = toolsSection.createDiv({ cls: "qg-action-row" });
 		const kmInfo = kmRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
-		kmInfo.createDiv({ text: "🧠 知识点管理", cls: "qg-action-label" });
-		kmInfo.createDiv({ text: "查看并删除知识点及其对应的索引文件", cls: "qg-action-desc" });
+		kmInfo.createDiv({ text: t("🧠 知识点管理"), cls: "qg-action-label" });
+		kmInfo.createDiv({ text: t("查看并删除知识点及其对应的索引文件"), cls: "qg-action-desc" });
 		kmRow.addEventListener("click", () => { this.homeView = "knowledgeManager"; void this.renderHomeTab(); });
 		const rebuildRow = toolsSection.createDiv({ cls: "qg-action-row" });
 		const rebuildInfo = rebuildRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
-		rebuildInfo.createDiv({ text: "🔄 重建知识点索引", cls: "qg-action-label" });
-		rebuildInfo.createDiv({ text: "扫描各文件夹的标签，重新生成关联的知识点索引文件", cls: "qg-action-desc" });
-		rebuildRow.addEventListener("click", () => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); })(); });
+		rebuildInfo.createDiv({ text: t("🔄 重建知识点索引"), cls: "qg-action-label" });
+		rebuildInfo.createDiv({ text: t("扫描各文件夹的标签，重新生成关联的知识点索引文件"), cls: "qg-action-desc" });
+		rebuildRow.addEventListener("click", () => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice(t("知识点索引已重建")); })(); });
 		const cacheRow = toolsSection.createDiv({ cls: "qg-action-row" });
 		const cacheInfo = cacheRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
-		cacheInfo.createDiv({ text: "🧹 清除缓存", cls: "qg-action-label" });
-		cacheInfo.createDiv({ text: "清空内存中的错题缓存，下次访问自动重新读取", cls: "qg-action-desc" });
-		cacheRow.addEventListener("click", () => { this.plugin.invalidateCache(); new Notice("缓存已清除"); });
+		cacheInfo.createDiv({ text: t("🧹 清除缓存"), cls: "qg-action-label" });
+		cacheInfo.createDiv({ text: t("清空内存中的错题缓存，下次访问自动重新读取"), cls: "qg-action-desc" });
+		cacheRow.addEventListener("click", () => { this.plugin.invalidateCache(); new Notice(t("缓存已清除")); });
 	}
 
 	// ===================== QUESTIONS TAB =====================
