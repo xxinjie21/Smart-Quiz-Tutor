@@ -70,6 +70,13 @@
 - Export to **Markdown**, **Word (.docx)** or **PDF**.
 - Answer-free exports are available for self-testing.
 
+### 🌐 Bilingual UI (Chinese / English)
+- One-click **interface language switch** in Settings — the whole UI flips between **中文** and **English** instantly.
+- The switch is also available right inside the sidebar settings; command palette names update after a plugin restart.
+- **AI prompts are bilingual too** while keeping the "language follows the material" rule: Chinese material still produces Chinese questions, English material produces English questions.
+- English parsing & export support (`Answer:`, `Explanation:`, `Answer Summary`, ...) — English-material exams parse and export correctly.
+- Missing translations fall back to the original Chinese text, so the UI never goes blank.
+
 ---
 
 ## Repository
@@ -136,6 +143,7 @@ Customizable in **Settings** → **Hotkeys**.
 
 | Setting | Description | Default |
 |---------|-------------|---------|
+| 界面语言 | Interface language (`中文` / `English`) | `中文` |
 | 接口类型 | Ollama or OpenAI-compatible | `Ollama` |
 | 接口地址 | API service URL | `http://127.0.0.1:11434` |
 | 模型名称 | AI model | `qwen2:7b` |
@@ -186,6 +194,17 @@ The sidebar has **6 tabs**:
 ---
 
 ## Changelog
+
+### v2.1.0
+- **One-click Chinese/English language switch** — ~500 UI strings across all tabs now go through a zh/en dictionary; switch instantly from Settings (or the in-sidebar settings).
+- **Bilingual AI prompts** — question generation, exam extraction, note generation and tag suggestion support both languages, keeping the "language follows the material" rule.
+- **English parsing & export support** — the question parser and exporter now recognize `Answer:` / `Explanation:` / `Answer Summary` etc., so English-material questions parse and export correctly.
+- **Dictionary fallback** — missing translations show the original text, so the UI never goes blank.
+- Made the dynamic-script strip regex minifier-agnostic, keeping `createElement("script")` at **0** for the Obsidian review lint.
+- 153 tests pass (new: dictionary integrity, placeholder replacement, bilingual prompts, English parsing); `tsc` 0 errors, ESLint 0 errors.
+
+### v2.0.1
+- Removed the remaining dynamic `<script>` injection (from the `setimmediate` dependency) that Obsidian's review lint flagged as an error — `createElement("script")` went from 3 to **0**, unblocking community review.
 
 ### v2.0.0
 - **Knowledge-index rebuild is now resilient** — a single failed tag write no longer aborts the whole rebuild; stale index files are cleaned up in one pass.
@@ -268,6 +287,13 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 - 支持导出 **Markdown**、**Word (.docx)**、**PDF**。
 - 可导出无答案版用于自测。
 
+### 🌐 中英文双语界面
+- 设置页**一键切换界面语言**，整个界面在 **中文 / English** 间即时切换。
+- 侧边栏设置内也可直接切换；命令面板中的命令名在重启插件后更新。
+- **AI 提示词同样双语化**，同时保留「语言与材料一致」规则：中文材料仍出中文题，英文材料出英文题。
+- **英文解析与导出兼容**（`Answer:`、`Explanation:`、`Answer Summary` 等）——英文材料的试卷可正常解析与导出。
+- 漏翻的文案自动回退显示中文原文，界面永不空白。
+
 ---
 
 ## 仓库地址
@@ -334,6 +360,7 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 
 | 设置项 | 说明 | 默认值 |
 |--------|------|--------|
+| 界面语言 | 界面语言（`中文` / `English`） | `中文` |
 | 接口类型 | Ollama 或 OpenAI 兼容 | `Ollama` |
 | 接口地址 | API 服务地址 | `http://127.0.0.1:11434` |
 | 模型名称 | AI 模型 | `qwen2:7b` |
@@ -384,6 +411,17 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 ---
 
 ## 更新日志
+
+### v2.1.0
+- **一键中英文切换** — 全部 Tab 约 500 条 UI 文案接入中英文字典，在设置页（或侧边栏设置内）一键切换、即时生效。
+- **AI 提示词双语化** — 出题、识别试卷、生成笔记、添加标签的提示词支持中英文，保留「语言与材料一致」规则。
+- **英文解析与导出兼容** — 题目解析器与导出器识别 `Answer:` / `Explanation:` / `Answer Summary` 等英文标签，英文材料出的题可正常解析与导出。
+- **字典回退机制** — 漏翻文案自动显示原文，界面永不空白。
+- 动态脚本剥离正则改为与 minifier 变量名无关，`createElement("script")` 始终保持 **0 处**，满足 Obsidian 审核 lint。
+- 153 项测试全部通过（新增：字典完整性、占位符替换、提示词双语、英文解析）；`tsc` 0 错误、ESLint 0 errors。
+
+### v2.0.1
+- 清除 `setimmediate` 依赖残留的动态 `<script>` 注入（Obsidian 审核 lint 报错的靶点），`createElement("script")` 由 3 处降为 **0 处**，解除社区审核阻塞。
 
 ### v2.0.0
 - **知识点索引重建更可靠** — 单个标签写入失败不再中断整个重建；过期索引一次性全部清理。
