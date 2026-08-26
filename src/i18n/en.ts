@@ -191,4 +191,16 @@ export const en: Record<keyof typeof zh, string> = {
 	"正确！下次复习 {d}（间隔{i}天）": "Correct! Next review {d} (interval {i} days)",
 	"已记录错误，明天复习": "Recorded as wrong; review tomorrow",
 	"更新复习计划失败：{msg}": "Failed to update review schedule: {msg}",
+	// ---- Sidebar: review tab ----
+	"全部": "All",
+	"今日暂无待复习内容，继续学习积累吧！": "Nothing due today — keep learning and building up!",
+	"今日待复习": "Due today",
+	"{n} 项": "{n} items",
+	"错题 {n}": "Wrong {n}",
+	"题目 {n}": "Questions {n}",
+	"笔记 {n}": "Notes {n}",
+	"无标签": "No tags",
+	"✓ 完成": "✓ Done",
+	"✗ 仍错": "✗ Still wrong",
+	"已标记完成！下次复习 {d}（间隔{i}天）": "Marked done! Next review {d} (interval {i} days)",
 };
