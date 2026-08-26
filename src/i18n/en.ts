@@ -46,4 +46,17 @@ export const en: Record<keyof typeof zh, string> = {
 	"启动时提醒复习": "Remind to review on startup",
 	"界面语言": "Interface language",
 	"切换后界面文案即时生效；命令面板中的命令名需重启插件后更新": "UI text updates immediately; command palette names update after restarting the plugin",
+	// ---- Review interval presets ----
+	"慢速": "Slow",
+	"标准": "Standard",
+	"快速": "Fast",
+	"复盘间隔长、执行省心，适合已初步掌握、仅需定期回顾的错题": "Long intervals, low effort; for wrong answers you mostly know and only need periodic review",
+	"考前日常训练主力方案，遗忘曲线与复习节奏平衡": "Main option for daily pre-exam practice; balances the forgetting curve with review pace",
+	"前期隔天密集复盘，适合频繁出错的高频薄弱点": "Dense review every other day early on; for frequent weak points",
+	"适合基础扎实、掌握牢固、几乎不会遗忘的简单题目": "For simple questions you know well and rarely forget",
+	"覆盖范围广、周期适中，配合考研各阶段节奏": "Broad coverage, moderate cycles; fits each stage of exam prep",
+	"加密前期间隔、反复强化，适合刚学完的重难点": "Tighter early intervals, repeated reinforcement; for newly learned difficult points",
+	"长线缓释记忆，适合考研基础阶段按部就班的日常背诵": "Long-term gradual recall; steady daily memorization for the foundation stage",
+	"中等密度、长线巩固，强化期系统性复习主力配置": "Medium density, long-term consolidation; main config for the intensive stage",
+	"考前冲刺专用，短期高频轰炸、以速度换覆盖": "Pre-exam sprint: short high-frequency bursts, trading depth for coverage",
 };
