@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	noteReviewIntervals: "2,6,14,35,70",
 	noteViewFolder: "笔记",
 	knowledgeFolder: "知识点",
+	language: "zh",
 };
 
 export const SYSTEM_TAGS = ["错题", "题目", "笔记"];

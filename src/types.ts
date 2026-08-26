@@ -68,6 +68,7 @@ export interface PluginSettings {
 	noteReviewIntervals: string;
 	noteViewFolder: string;
 	knowledgeFolder: string;
+	language: "zh" | "en";
 }
 
 export interface TreeNode {

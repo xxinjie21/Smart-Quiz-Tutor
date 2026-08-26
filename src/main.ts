@@ -15,6 +15,7 @@ import { getElectronRemote } from "./utils/electron";
 import { KnowledgeService, type IndexSource } from "./services/knowledgeService";
 import { MainSidebarView } from "./views/sidebarView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
+import { setLanguage } from "./i18n/index";
 
 // ===================== 主插件入口 =====================
 
@@ -35,6 +36,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, raw);
 		if (data?.history) this.history = data.history;
+		setLanguage(this.settings.language || "zh");
 	}
 	rootPath(subFolder: string): string {
 		const root = this.settings.rootFolder;
@@ -421,6 +423,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 }
 
 // ===================== 公共导出（保持向后兼容） =====================
+export { t, tf, setLanguage, getLanguage, zh, en } from "./i18n/index";
 export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE } from "./constants";
 export { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
 export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
