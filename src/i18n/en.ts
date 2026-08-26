@@ -44,6 +44,7 @@ export const en: Record<keyof typeof zh, string> = {
 	"薄弱点阈值": "Weak point threshold",
 	"次以上错题标记为薄弱": "or more wrong answers marks a knowledge point as weak",
 	"启动时提醒复习": "Remind to review on startup",
+	"语言": "Language",
 	"界面语言": "Interface language",
 	"切换后界面文案即时生效；命令面板中的命令名需重启插件后更新": "UI text updates immediately; command palette names update after restarting the plugin",
 	// ---- Review interval presets ----

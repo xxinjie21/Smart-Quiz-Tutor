@@ -26,7 +26,7 @@ import { chatLLM, type ChatLLMOptions } from "../services/llmService";
 import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, mergeExamChunks } from "../services/questionService";
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 import { buildNotePrompt, parseNoteResult, buildNoteFrontmatter, type NoteGenSourceType } from "../services/noteService";
-import { t, tf, getLanguage } from "../i18n/index";
+import { t, tf, getLanguage, setLanguage } from "../i18n/index";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
@@ -1549,6 +1549,19 @@ export class MainSidebarView extends ItemView {
 			inp.addEventListener("change", () => { onChange(inp.value); void this.plugin.saveSettings(); });
 			return inp;
 		};
+
+		section(t("界面语言"));
+		const langRow = fieldRow(t("语言"));
+		const langSel = langRow.createEl("select", { attr: { style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
+		langSel.createEl("option", { value: "zh", text: "中文" });
+		langSel.createEl("option", { value: "en", text: "English" });
+		langSel.value = s.language || "zh";
+		langSel.addEventListener("change", () => {
+			s.language = langSel.value as "zh" | "en";
+			setLanguage(s.language);
+			void this.plugin.saveSettings();
+			void this.renderSettingsTab();
+		});
 
 		section(t("文件夹"));
 		el.createDiv({ text: t("根文件夹下包含所有模块子文件夹，修改后需重启插件生效"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
