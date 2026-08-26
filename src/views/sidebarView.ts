@@ -2384,9 +2384,9 @@ export class MainSidebarView extends ItemView {
 			{ key: "wrong", label: t("错题") },
 			{ key: "note", label: t("现有笔记") },
 		];
-		for (const t of types) {
-			const btn = typeRow.createEl("button", { text: t.label, attr: { style: "padding:4px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);background:" + (this.noteGenSourceType === t.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-			btn.addEventListener("click", () => { this.noteGenSourceType = t.key; this.noteGenSelected.clear(); this.noteGenResultText = ""; void this.renderNoteGenView(); });
+		for (const tp of types) {
+			const btn = typeRow.createEl("button", { text: tp.label, attr: { style: "padding:4px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);background:" + (this.noteGenSourceType === tp.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
+			btn.addEventListener("click", () => { this.noteGenSourceType = tp.key; this.noteGenSelected.clear(); this.noteGenResultText = ""; void this.renderNoteGenView(); });
 		}
 
 		const listWrap = el.createDiv({});
@@ -2686,7 +2686,7 @@ export class MainSidebarView extends ItemView {
 	// ===================== KNOWLEDGE MANAGER =====================
 	private knowledgeFolders(): { path: string; label: string }[] {
 		return [
-			{ path: this.plugin.rootPath(this.plugin.settings.knowledgeFolder), label: "知识点索引" },
+			{ path: this.plugin.rootPath(this.plugin.settings.knowledgeFolder), label: t("知识点索引") },
 		].filter(f => !!f.path);
 	}
 
@@ -2788,27 +2788,27 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.homeView = "default"; void this.renderHomeTab(); });
 
-		el.createDiv({ text: "知识点管理", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "可多选/全选，删除会同时删除知识点索引文件", attr: { style: "color:var(--text-muted);font-size:15px;margin-bottom:14px;" } });
+		el.createDiv({ text: t("知识点管理"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: t("可多选/全选，删除会同时删除知识点索引文件"), attr: { style: "color:var(--text-muted);font-size:15px;margin-bottom:14px;" } });
 
 		const list = await this.listKnowledgeManagerTags();
 		const selectedSet = new Set<string>();
 
 		const toolbar = el.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:12px;" } });
-		const searchInput = toolbar.createEl("input", { attr: { type: "text", placeholder: "搜索知识点...", style: "flex:1;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
-		const refreshBtn = toolbar.createEl("button", { text: "刷新", attr: { style: "padding:6px 14px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+		const searchInput = toolbar.createEl("input", { attr: { type: "text", placeholder: t("搜索知识点..."), style: "flex:1;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
+		const refreshBtn = toolbar.createEl("button", { text: t("刷新"), attr: { style: "padding:6px 14px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 		refreshBtn.addEventListener("click", () => { this.plugin.invalidateCache(); void this.renderKnowledgeManager(); });
 
 		const bulkBar = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:10px;margin-bottom:10px;" } });
-		const selectAllCb = bulkBar.createEl("input", { attr: { type: "checkbox", title: "全选" } });
-		bulkBar.createSpan({ text: "全选", attr: { style: "color:var(--text-muted);font-size:16px;cursor:pointer;user-select:none;" } }).addEventListener("click", () => { selectAllCb.checked = !selectAllCb.checked; selectAllCb.checked ? selectAll() : clearSel(); });
-		const bulkCount = bulkBar.createDiv({ text: "已选 0 个", attr: { style: "flex:1;color:var(--text-muted);font-size:16px;" } });
-		const bulkDelBtn = bulkBar.createEl("button", { text: "删除选中", attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;font-size:16px;border:1px solid var(--color-red);color:var(--color-red);background:transparent;opacity:0.5;pointer-events:none;" } });
+		const selectAllCb = bulkBar.createEl("input", { attr: { type: "checkbox", title: t("全选") } });
+		bulkBar.createSpan({ text: t("全选"), attr: { style: "color:var(--text-muted);font-size:16px;cursor:pointer;user-select:none;" } }).addEventListener("click", () => { selectAllCb.checked = !selectAllCb.checked; selectAllCb.checked ? selectAll() : clearSel(); });
+		const bulkCount = bulkBar.createDiv({ text: tf("已选 {n} 个", { n: 0 }), attr: { style: "flex:1;color:var(--text-muted);font-size:16px;" } });
+		const bulkDelBtn = bulkBar.createEl("button", { text: t("删除选中"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;font-size:16px;border:1px solid var(--color-red);color:var(--color-red);background:transparent;opacity:0.5;pointer-events:none;" } });
 
-		const summaryEl = el.createDiv({ text: "共 " + list.length + " 个知识点", attr: { style: "color:var(--text-muted);font-size:16px;margin-bottom:8px;" } });
+		const summaryEl = el.createDiv({ text: tf("共 {n} 个知识点", { n: list.length }), attr: { style: "color:var(--text-muted);font-size:16px;margin-bottom:8px;" } });
 
 		const wrap = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:8px;padding-bottom:20px;" } });
 
@@ -2816,7 +2816,7 @@ export class MainSidebarView extends ItemView {
 
 		const updateBulk = () => {
 			const n = selectedSet.size;
-			bulkCount.setText("已选 " + n + " 个");
+			bulkCount.setText(tf("已选 {n} 个", { n }));
 			bulkDelBtn.style.opacity = n === 0 ? "0.5" : "1";
 			bulkDelBtn.style.pointerEvents = n === 0 ? "none" : "auto";
 			if (currentFiltered.length > 0) {
@@ -2857,7 +2857,7 @@ export class MainSidebarView extends ItemView {
 						ok++;
 					}
 				}
-				new Notice("已删除 " + ok + " 处知识点索引文件");
+				new Notice(tf("已删除 {n} 处知识点索引文件", { n: ok }));
 				this.plugin.invalidateCache();
 				await this.renderKnowledgeManager();
 			})();
@@ -2868,9 +2868,9 @@ export class MainSidebarView extends ItemView {
 			const q = query.trim().toLowerCase();
 			const filtered = q ? list.filter(i => i.tag.toLowerCase().includes(q) || i.indexFiles.some(s => s.sourceLabel.toLowerCase().includes(q))) : list;
 			currentFiltered = filtered;
-			summaryEl.setText("共 " + list.length + " 个知识点" + (q ? "，筛选出 " + filtered.length + " 个" : ""));
+			summaryEl.setText(tf("共 {a} 个知识点", { a: list.length }) + (q ? tf("，筛选出 {b} 个", { b: filtered.length }) : ""));
 			if (filtered.length === 0) {
-				wrap.createDiv({ text: q ? "未找到匹配的知识点" : "暂无知识点索引文件", attr: { style: "color:var(--text-muted);padding:20px 0;text-align:center;" } });
+				wrap.createDiv({ text: q ? t("未找到匹配的知识点") : t("暂无知识点索引文件"), attr: { style: "color:var(--text-muted);padding:20px 0;text-align:center;" } });
 				updateBulk();
 				return;
 			}
@@ -2893,10 +2893,10 @@ export class MainSidebarView extends ItemView {
 				const nCount = item.indexFiles.filter(s => s.sourceLabel === "笔记索引").length;
 				const wCount = item.indexFiles.filter(s => s.sourceLabel === "错题索引").length;
 				const parts: string[] = [];
-				if (qCount > 0) parts.push("题" + qCount);
-				if (nCount > 0) parts.push("记" + nCount);
-				if (wCount > 0) parts.push("错" + wCount);
-				typeInfo.setText(parts.join(" ") || "0 处索引");
+				if (qCount > 0) parts.push(t("题") + qCount);
+				if (nCount > 0) parts.push(t("记") + nCount);
+				if (wCount > 0) parts.push(t("错") + wCount);
+				typeInfo.setText(parts.join(" ") || t("0 处索引"));
 				head.addEventListener("click", (e) => {
 					if ((e.target as HTMLElement).tagName === "BUTTON") return;
 					if ((e.target as HTMLElement).tagName === "INPUT") return;
@@ -2904,37 +2904,38 @@ export class MainSidebarView extends ItemView {
 					arrow.setText(detail.style.display === "none" ? "▸" : "▾");
 				});
 				const detail = row.createDiv({ attr: { style: "display:none;border-top:1px solid var(--background-modifier-border);padding:10px 12px;font-size:15px;" } });
-				detail.createDiv({ text: "索引文件：", attr: { style: "font-weight:600;color:var(--text-muted);margin-bottom:6px;" } });
+				detail.createDiv({ text: t("索引文件："), attr: { style: "font-weight:600;color:var(--text-muted);margin-bottom:6px;" } });
 				for (const s of item.indexFiles) {
 					const line = detail.createDiv({ attr: { style: "display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;" } });
-					line.createSpan({ text: s.sourceLabel + "：", attr: { style: "flex-shrink:0;color:var(--interactive-accent);" } });
+					const srcDisplay = s.sourceLabel === "题目索引" ? t("题目索引") : s.sourceLabel === "笔记索引" ? t("笔记索引") : t("错题索引");
+					line.createSpan({ text: srcDisplay + "：", attr: { style: "flex-shrink:0;color:var(--interactive-accent);" } });
 					line.createDiv({ text: s.file, attr: { style: "flex:1;word-break:break-all;color:var(--text-muted);" } });
 				}
-				detail.createDiv({ text: "……（点击下方查看索引条目）", attr: { style: "color:var(--text-muted);font-size:14px;margin:4px 0;" } });
-				const peekBtn = detail.createEl("button", { text: "🡕 查看索引条目", attr: { style: "padding:5px 12px;border-radius:6px;cursor:pointer;font-size:15px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);margin-top:4px;" } });
+				detail.createDiv({ text: t("……（点击下方查看索引条目）"), attr: { style: "color:var(--text-muted);font-size:14px;margin:4px 0;" } });
+				const peekBtn = detail.createEl("button", { text: t("🡕 查看索引条目"), attr: { style: "padding:5px 12px;border-radius:6px;cursor:pointer;font-size:15px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);margin-top:4px;" } });
 				peekBtn.addEventListener("click", () => {
 					void (async () => {
-						peekBtn.setText("加载中...");
+						peekBtn.setText(t("加载中..."));
 						peekBtn.disabled = true;
 						const linkSet = new Set<string>();
 						for (const s of item.indexFiles) {
 							const content = await this.readIndexFileContent(s.file);
 							for (const l of this.extractIndexLinks(content)) linkSet.add(l);
 						}
-						peekBtn.setText("🡕 查看索引条目");
+						peekBtn.setText(t("🡕 查看索引条目"));
 						peekBtn.disabled = false;
 						linksEl.empty();
 						linksEl.show();
 						const links = [...linkSet];
 						if (links.length === 0) {
-							linksEl.createDiv({ text: "该知识点暂无关联条目", attr: { style: "color:var(--text-muted);" } });
+							linksEl.createDiv({ text: t("该知识点暂无关联条目"), attr: { style: "color:var(--text-muted);" } });
 						} else {
-							linksEl.createDiv({ text: "关联条目（" + links.length + "）：", attr: { style: "font-weight:600;color:var(--text-muted);margin-bottom:6px;" } });
+							linksEl.createDiv({ text: tf("关联条目（{n}）：", { n: links.length }), attr: { style: "font-weight:600;color:var(--text-muted);margin-bottom:6px;" } });
 							for (const l of links) {
 								const linkRow = linksEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:2px 0;line-height:1.5;cursor:pointer;" } });
 								linkRow.createSpan({ text: l, attr: { style: "flex:1;word-break:break-all;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
 								linkRow.classList.add("qg-hover-bg");
-								linkRow.setAttribute("title", "打开：" + l);
+								linkRow.setAttribute("title", tf("打开：{name}", { name: l }));
 								linkRow.addEventListener("click", () => this.openLinkedFile(l));
 							}
 						}
@@ -2966,7 +2967,7 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; this.homeView = "default"; void this.renderHomeTab(); });
 
 		if (this.genResultText) {
@@ -2974,59 +2975,59 @@ export class MainSidebarView extends ItemView {
 			return;
 		}
 
-		el.createDiv({ text: "题目设置", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:10px;" } });
+		el.createDiv({ text: t("题目设置"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:10px;" } });
 
 		const cleanedText = cleanSourceText(this.genSourceText);
 		const tokenEst = estimateTokens(cleanedText);
 		const charCount = cleanedText.length;
 
 		const infoEl = el.createDiv({ attr: { style: "padding:10px 14px;margin-bottom:14px;border-radius:8px;background:var(--background-secondary);font-size:18px;line-height:1.8;" } });
-		infoEl.createDiv({ text: "当前文档：" + this.genFileName, attr: { style: "font-weight:600;" } });
-		infoEl.createDiv({ text: "清洗后字符数：" + charCount.toLocaleString() + "　预估Token：" + tokenEst.toLocaleString(), attr: { style: "color:var(--text-muted);" } });
-		if (tokenEst > TOKEN_WARN_THRESHOLD) infoEl.createDiv({ text: "⚠️ 内容较长，建议分段生成题目", attr: { style: "color:var(--color-orange);margin-top:4px;" } });
+		infoEl.createDiv({ text: tf("当前文档：{name}", { name: this.genFileName }), attr: { style: "font-weight:600;" } });
+		infoEl.createDiv({ text: tf("清洗后字符数：{n}", { n: charCount.toLocaleString() }) + tf("　预估Token：{t}", { t: tokenEst.toLocaleString() }), attr: { style: "color:var(--text-muted);" } });
+		if (tokenEst > TOKEN_WARN_THRESHOLD) infoEl.createDiv({ text: t("⚠️ 内容较长，建议分段生成题目"), attr: { style: "color:var(--color-orange);margin-top:4px;" } });
 
 		const cfg = this.plugin.settings;
 		const savedEnabled = cfg.lastEnabledTypes.split(",").filter(Boolean);
 		const types: { label: string; key: keyof PluginSettings; count: number; enabled: boolean }[] = [
-			{ label: "单选题", key: "countSingle", count: cfg.countSingle, enabled: savedEnabled.length === 0 || savedEnabled.includes("single") },
-			{ label: "多选题", key: "countMulti", count: cfg.countMulti, enabled: savedEnabled.length === 0 || savedEnabled.includes("multi") },
-			{ label: "判断题", key: "countJudge", count: cfg.countJudge, enabled: savedEnabled.length === 0 || savedEnabled.includes("judge") },
-			{ label: "填空题", key: "countBlank", count: cfg.countBlank, enabled: savedEnabled.length === 0 || savedEnabled.includes("blank") },
-			{ label: "简答题", key: "countEssay", count: cfg.countEssay, enabled: savedEnabled.length === 0 || savedEnabled.includes("essay") },
+			{ label: t("单选题"), key: "countSingle", count: cfg.countSingle, enabled: savedEnabled.length === 0 || savedEnabled.includes("single") },
+			{ label: t("多选题"), key: "countMulti", count: cfg.countMulti, enabled: savedEnabled.length === 0 || savedEnabled.includes("multi") },
+			{ label: t("判断题"), key: "countJudge", count: cfg.countJudge, enabled: savedEnabled.length === 0 || savedEnabled.includes("judge") },
+			{ label: t("填空题"), key: "countBlank", count: cfg.countBlank, enabled: savedEnabled.length === 0 || savedEnabled.includes("blank") },
+			{ label: t("简答题"), key: "countEssay", count: cfg.countEssay, enabled: savedEnabled.length === 0 || savedEnabled.includes("essay") },
 		];
 		const activeTypes = types.filter(t => t.count > 0);
 
 		if (activeTypes.length === 1) {
 			const only = activeTypes[0]!;
-			el.createDiv({ text: "题型：" + only.label + " " + only.count + " 题", attr: { style: "font-size:18px;margin-bottom:14px;padding:8px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
+			el.createDiv({ text: tf("题型：{label} {n} 题", { label: only.label, n: only.count }), attr: { style: "font-size:18px;margin-bottom:14px;padding:8px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
 		} else {
 			const toggleArea = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" } });
-			for (const t of types) {
+			for (const tp of types) {
 				const row = toggleArea.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--background-modifier-border);" } });
 				const cb = row.createEl("input", { attr: { type: "checkbox" } });
-				cb.checked = t.enabled;
-				row.createSpan({ text: t.label, attr: { style: "min-width:60px;font-size:18px;" } });
-				const countInput = row.createEl("input", { attr: { type: "number", min: "0", max: "50", value: String(t.count), style: "width:50px;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;font-size:18px;" } });
-				countInput.addEventListener("change", () => { t.count = parseInt(countInput.value) || 0; (cfg[t.key] as number) = t.count; });
-				row.createSpan({ text: "题", attr: { style: "font-size:17px;color:var(--text-muted);" } });
-				cb.addEventListener("change", () => { t.enabled = cb.checked; });
+				cb.checked = tp.enabled;
+				row.createSpan({ text: tp.label, attr: { style: "min-width:60px;font-size:18px;" } });
+				const countInput = row.createEl("input", { attr: { type: "number", min: "0", max: "50", value: String(tp.count), style: "width:50px;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;font-size:18px;" } });
+				countInput.addEventListener("change", () => { tp.count = parseInt(countInput.value) || 0; (cfg[tp.key] as number) = tp.count; });
+				row.createSpan({ text: t("题"), attr: { style: "font-size:17px;color:var(--text-muted);" } });
+				cb.addEventListener("change", () => { tp.enabled = cb.checked; });
 			}
 		}
 
-		el.createDiv({ text: "知识点标签（逗号分隔）：", attr: { style: "margin-bottom:4px;font-size:18px;" } });
-		const tagsInput = el.createEl("input", { attr: { type: "text", placeholder: "例如：微积分, 导数", value: cfg.lastTags, style: "width:100%;padding:6px;margin-bottom:14px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;" } });
+		el.createDiv({ text: t("知识点标签（逗号分隔）："), attr: { style: "margin-bottom:4px;font-size:18px;" } });
+		const tagsInput = el.createEl("input", { attr: { type: "text", placeholder: t("例如：微积分, 导数"), value: cfg.lastTags, style: "width:100%;padding:6px;margin-bottom:14px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;" } });
 
 		const autoSaveRow = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin-bottom:14px;" } });
 		const autoSaveCb = autoSaveRow.createEl("input", { attr: { type: "checkbox" } });
 		autoSaveCb.checked = cfg.autoSave;
 		autoSaveCb.addEventListener("change", () => { cfg.autoSave = autoSaveCb.checked; });
-		autoSaveRow.createSpan({ text: "生成后自动保存到题库", attr: { style: "font-size:18px;" } });
+		autoSaveRow.createSpan({ text: t("生成后自动保存到题库"), attr: { style: "font-size:18px;" } });
 
 		const startBtn = el.createDiv({ attr: { style: "text-align:center;" } });
-		const sb = startBtn.createEl("button", { text: "开始生成", attr: { class: "mod-cta", style: "padding:8px 24px;border-radius:4px;cursor:pointer;font-size:20px;" } });
+		const sb = startBtn.createEl("button", { text: t("开始生成"), attr: { class: "mod-cta", style: "padding:8px 24px;border-radius:4px;cursor:pointer;font-size:20px;" } });
 		sb.addEventListener("click", () => {
 			const enabledTypes = types.filter(t => t.enabled && t.count > 0);
-			if (enabledTypes.length === 0) { new Notice("请至少选择一种题型且数量大于0"); return; }
+			if (enabledTypes.length === 0) { new Notice(t("请至少选择一种题型且数量大于0")); return; }
 			this.genCurrentTags = tagsInput.value.split(",").map(s => s.trim()).filter(Boolean);
 			cfg.lastTags = tagsInput.value;
 			cfg.lastEnabledTypes = types.filter(t => t.enabled).map(t => t.key.replace("count", "").toLowerCase()).join(",");
@@ -3042,25 +3043,25 @@ export class MainSidebarView extends ItemView {
 		if (!el) return;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回设置", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; this.genResultText = ""; this.renderGenerateView(); });
 
 		const progressEl = el.createDiv({ attr: { style: "text-align:center;padding:14px;margin-bottom:10px;border-radius:8px;background:var(--background-secondary);" } });
-		const spinner = progressEl.createDiv({ text: "⏳ 正在生成试题...", attr: { style: "font-size:20px;font-weight:600;line-height:1.6;" } });
-		const subText = progressEl.createDiv({ text: "预计需要 10-60 秒", attr: { style: "font-size:17px;color:var(--text-muted);margin-top:4px;" } });
+		const spinner = progressEl.createDiv({ text: t("⏳ 正在生成试题..."), attr: { style: "font-size:20px;font-weight:600;line-height:1.6;" } });
+		const subText = progressEl.createDiv({ text: t("预计需要 10-60 秒"), attr: { style: "font-size:17px;color:var(--text-muted);margin-top:4px;" } });
 
 		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;" } });
 		const update = (txt: string) => { this.genResultText = txt; textArea.value = txt; textArea.scrollTop = textArea.scrollHeight; };
 
 		const btnRow = el.createDiv({ attr: { style: "margin-top:8px;display:flex;gap:6px;" } });
-		const cancelBtn = btnRow.createEl("button", { text: "⏹ 中止", attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
-		cancelBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; spinner.setText("已中止"); subText.setText("已获取的内容已保留"); });
+		const cancelBtn = btnRow.createEl("button", { text: t("⏹ 中止"), attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+		cancelBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; spinner.setText(t("已中止")); subText.setText(t("已获取的内容已保留")); });
 
 		void this.genRunGenerate(update, typeStr, spinner, subText);
 	}
 
 	async genRunGenerate(onChunk: (s: string) => void, typeStr: string, spinner: HTMLElement, subText: HTMLElement) {
-		if (this.genIsGenerating) { new Notice("正在生成中，请等待完成"); return; }
+		if (this.genIsGenerating) { new Notice(t("正在生成中，请等待完成")); return; }
 		const cfg = this.plugin.settings;
 		const existingTags = await this.plugin.loadExistingKnowledgeTags();
 		const prompt = buildGeneratePrompt(this.genSourceText, typeStr, existingTags);
@@ -3069,9 +3070,9 @@ export class MainSidebarView extends ItemView {
 		this.genIsGenerating = true;
 
 		try {
-			full = await this.callAIWithPrompt(prompt, undefined, { system: "你是一个出题助手，严格按照指定格式输出题目。" });
+			full = await this.callAIWithPrompt(prompt, undefined, { system: t("你是一个出题助手，严格按照指定格式输出题目。") });
 
-			if (!full) { onChunk("接口返回内容为空，请检查模型名称和接口地址配置是否正确。"); return; }
+			if (!full) { onChunk(t("接口返回内容为空，请检查模型名称和接口地址配置是否正确。")); return; }
 
 			const { tags: aiTags, cleanText } = parseAITagsFromResult(full);
 			full = fixSequentialNumbers(cleanText);
@@ -3079,21 +3080,21 @@ export class MainSidebarView extends ItemView {
 
 			const questions = parseQuestions(full);
 			const gradableCount = questions.filter(q => q.type !== "essay" && q.type !== "blank").length;
-			spinner.setText("✅ 生成完成");
-			const tagInfo = aiTags.length > 0 ? " | 知识点：" + aiTags.join(", ") : "";
-			subText.setText("共解析出 " + questions.length + " 题（客观题 " + gradableCount + " 题）" + tagInfo + (questions.length === 0 ? " ⚠️ 请检查AI输出格式" : ""));
+			spinner.setText(t("✅ 生成完成"));
+			const tagInfo = aiTags.length > 0 ? " | " + tf("知识点：{tags}", { tags: aiTags.join(", ") }) : "";
+			subText.setText(tf("共解析出 {n} 题（客观题 {m} 题）", { n: questions.length, m: gradableCount }) + tagInfo + (questions.length === 0 ? " " + t("⚠️ 请检查AI输出格式") : ""));
 
 			const entry: HistoryEntry = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), timestamp: Date.now(), fileName: this.genFileName, sourceSnippet: this.genSourceText.slice(0, MAX_HISTORY_SNIPPET), resultText: full, sourcePath: this.genSourcePath };
 			await this.plugin.addHistory(entry);
 			if (cfg.autoSave && full) await this.genSaveToVault();
 		} catch (err) {
 			if ((err as Error).name === "AbortError") {
-				spinner.setText("⚠️ 已中止");
-				subText.setText(this.aiCancelled ? "本次生成已停止，未保存任何内容" : "请求超时（3分钟）");
+				spinner.setText(t("⚠️ 已中止"));
+				subText.setText(this.aiCancelled ? t("本次生成已停止，未保存任何内容") : t("请求超时（3分钟）"));
 				return;
 			}
-			spinner.setText("❌ 生成失败");
-			onChunk("接口调用失败：" + (err as Error).message + "\n\n请检查：\n1. 接口地址\n2. API服务是否运行\n3. 模型名称");
+			spinner.setText(t("❌ 生成失败"));
+			onChunk(tf("接口调用失败：{msg}", { msg: (err as Error).message }) + t("\n\n请检查：\n1. 接口地址\n2. API服务是否运行\n3. 模型名称"));
 		} finally {
 			this.genIsGenerating = false;
 		}
@@ -3104,10 +3105,10 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回设置", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
 		backBtn.addEventListener("click", () => { this.genResultText = ""; this.renderGenerateView(); });
 
-		el.createDiv({ text: "生成结果", attr: { style: "font-size:20px;font-weight:bold;margin-bottom:8px;" } });
+		el.createDiv({ text: t("生成结果"), attr: { style: "font-size:20px;font-weight:bold;margin-bottom:8px;" } });
 		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;" } });
 		textArea.value = this.genResultText;
 		textArea.addEventListener("input", () => { this.genResultText = textArea.value; });
@@ -3117,22 +3118,22 @@ export class MainSidebarView extends ItemView {
 			const b = btnRow.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			b.addEventListener("click", cb);
 		};
-		actBtn("导出MD", () => { void this.genExportMd(); });
-		actBtn("导出Word", () => { void this.genExportWord(); });
-		actBtn("导出PDF", () => { void this.genExportPdf(); });
-		actBtn("无答案版", () => { void this.genExportNoAnswer(); });
+		actBtn(t("导出MD"), () => { void this.genExportMd(); });
+		actBtn(t("导出Word"), () => { void this.genExportWord(); });
+		actBtn(t("导出PDF"), () => { void this.genExportPdf(); });
+		actBtn(t("无答案版"), () => { void this.genExportNoAnswer(); });
 
 		const btnRow2 = el.createDiv({ attr: { style: "margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;" } });
 		const ctaBtn = (label: string, cb: () => void) => {
 			const b = btnRow2.createEl("button", { text: label, attr: { class: "mod-cta", style: "padding:5px 14px;border-radius:4px;cursor:pointer;font-size:18px;" } });
 			b.addEventListener("click", cb);
 		};
-		ctaBtn("保存到知识库", () => { void (async () => { await this.genSaveToVault(); })(); });
-		actBtn("开始答题", () => { if (!this.genResultText) { new Notice("请先生成试题"); return; } this.startAnswer(this.genResultText, this.genFileName, this.genSourcePath); });
+		ctaBtn(t("保存到知识库"), () => { void (async () => { await this.genSaveToVault(); })(); });
+		actBtn(t("开始答题"), () => { if (!this.genResultText) { new Notice(t("请先生成试题")); return; } this.startAnswer(this.genResultText, this.genFileName, this.genSourcePath); });
 	}
 
 	async genSaveToVault() {
-		if (!this.genResultText) { new Notice("还没有生成试题内容"); return; }
+		if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
 		this.resetAI();
 		try {
 			await ensureFolder(this.app, this.plugin.rootPath(this.plugin.settings.questionFolder));
@@ -3156,66 +3157,66 @@ export class MainSidebarView extends ItemView {
 				try { await this.app.vault.create(filePath, content); }
 				catch { await this.app.vault.create(this.plugin.rootPath(this.plugin.settings.questionFolder) + "/" + safeName(this.genFileName) + "_试题_" + Date.now() + ".md", content); }
 			}
-			new Notice("已保存到 " + this.plugin.rootPath(this.plugin.settings.questionFolder));
+			new Notice(tf("已保存到 {path}", { path: this.plugin.rootPath(this.plugin.settings.questionFolder) }));
 			this.plugin.emitDataChanged();
 			this.syncToKnowledgeIndex(allTags, fileName.replace(/\.md$/, ""), joinPath(this.plugin.rootPath(this.plugin.settings.questionFolder), fileName), "题目");
-		} catch (err) { new Notice("保存失败：" + (err as Error).message); }
+		} catch (err) { new Notice(tf("保存失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async genExportMd() {
 		try {
-			if (!this.genResultText) { new Notice("还没有生成试题内容"); return; }
+			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
 			if (r.canceled || !r.filePath) return;
 			const dateStr = new Date().toISOString().slice(0, 10);
-			fs.writeFileSync(r.filePath, "# " + this.genFileName + " 配套试题\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + stripAnswerSummarySection(this.genResultText), "utf-8");
-			new Notice("Md已保存");
-		} catch (err) { new Notice("导出失败：" + (err as Error).message); }
+			fs.writeFileSync(r.filePath, "# " + this.genFileName + t(" 配套试题") + "\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + stripAnswerSummarySection(this.genResultText), "utf-8");
+			new Notice(t("Md已保存"));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async genExportWord() {
 		try {
-			if (!this.genResultText) { new Notice("还没有生成试题内容"); return; }
+			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.docx", filters: [{ name: "Word", extensions: ["docx"] }] });
 			if (r.canceled || !r.filePath) return;
 			const dateStr = new Date().toISOString().slice(0, 10);
-			const children = buildWordParagraphs(this.genResultText, this.genFileName + " 配套试题", this.genFileName + " " + dateStr);
+			const children = buildWordParagraphs(this.genResultText, this.genFileName + t(" 配套试题"), this.genFileName + " " + dateStr);
 			const doc = new Document({ sections: [{ properties: {}, children }] });
 			const buffer = await Packer.toBuffer(doc);
 			fs.writeFileSync(r.filePath, Buffer.from(buffer));
-			new Notice("Word已保存");
-		} catch (err) { new Notice("导出失败：" + (err as Error).message); }
+			new Notice(t("Word已保存"));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async genExportPdf() {
 		try {
-			if (!this.genResultText) { new Notice("还没有生成试题内容"); return; }
+			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.pdf", filters: [{ name: "PDF", extensions: ["pdf"] }] });
 			if (r.canceled || !r.filePath) return;
-			await exportPdfDirect(r.filePath, this.genResultText, this.genFileName + " 配套试题", this.genFileName);
-			new Notice("PDF已保存");
-		} catch (err) { new Notice("导出失败：" + (err as Error).message); }
+			await exportPdfDirect(r.filePath, this.genResultText, this.genFileName + t(" 配套试题"), this.genFileName);
+			new Notice(t("PDF已保存"));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async genExportNoAnswer() {
 		try {
-			if (!this.genResultText) { new Notice("还没有生成试题内容"); return; }
+			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
 			const noAnswerText = stripAnswersForExport(this.genResultText);
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题_无答案.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
 			if (r.canceled || !r.filePath) return;
 			const dateStr = new Date().toISOString().slice(0, 10);
-			fs.writeFileSync(r.filePath, "# " + this.genFileName + " 配套试题（无答案版）\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + noAnswerText, "utf-8");
-			new Notice("无答案版已保存");
-		} catch (err) { new Notice("导出失败：" + (err as Error).message); }
+			fs.writeFileSync(r.filePath, "# " + this.genFileName + t(" 配套试题（无答案版）") + "\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + noAnswerText, "utf-8");
+			new Notice(t("无答案版已保存"));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async generateFromWeakPoints() {
 		const wp = await this.plugin.getWeakPoints();
-		if (wp.length === 0) { new Notice("暂无薄弱知识点数据"); return; }
+		if (wp.length === 0) { new Notice(t("暂无薄弱知识点数据")); return; }
 		const notes = await this.plugin.loadAllWrongNotes();
 		const sources: string[] = [];
 		const paths: string[] = [];
@@ -3252,19 +3253,19 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
 		backBtn.addEventListener("click", () => { this.homeView = "default"; void this.renderHomeTab(); });
 
 		if (this.answerQuestions.length === 0) {
-			el.createEl("p", { text: "未能解析出可答题的题目。", attr: { style: "color:var(--text-muted);padding:20px 0;" } });
+			el.createEl("p", { text: t("未能解析出可答题的题目。"), attr: { style: "color:var(--text-muted);padding:20px 0;" } });
 			return;
 		}
 
-		const typeLabels: Record<QuestionType, string> = { single: "单选", multi: "多选", judge: "判断", blank: "填空", essay: "简答" };
+		const typeLabels: Record<QuestionType, string> = { single: t("单选"), multi: t("多选"), judge: t("判断"), blank: t("填空"), essay: t("简答") };
 		const counts: Record<string, number> = {};
 		for (const q of this.answerQuestions) { const k = typeLabels[q.type]; counts[k] = (counts[k] || 0) + 1; }
 		const summary = Object.entries(counts).map(([k, v]) => k + " " + v).join(" / ");
-		el.createDiv({ text: "共 " + this.answerQuestions.length + " 题：" + summary, cls: "qg-summary" });
+		el.createDiv({ text: tf("共 {n} 题：", { n: this.answerQuestions.length }) + summary, cls: "qg-summary" });
 
 		for (const q of this.answerQuestions) {
 			const isGradable = q.type === "single" || q.type === "multi" || q.type === "judge";
@@ -3272,8 +3273,8 @@ export class MainSidebarView extends ItemView {
 
 			const headerRow = qEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:8px;" } });
 			headerRow.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;padding:2px 6px;border-radius:4px;background:var(--interactive-accent);color:var(--text-on-accent);font-weight:500;" } });
-			headerRow.createSpan({ text: "第 " + q.number + " 题", attr: { style: "font-size:17px;color:var(--text-muted);" } });
-			if (!isGradable) headerRow.createSpan({ text: "(仅参考)", attr: { style: "font-size:16px;color:var(--text-faint);" } });
+			headerRow.createSpan({ text: tf("第 {n} 题", { n: q.number }), attr: { style: "font-size:17px;color:var(--text-muted);" } });
+			if (!isGradable) headerRow.createSpan({ text: t("(仅参考)"), attr: { style: "font-size:16px;color:var(--text-faint);" } });
 
 			const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:8px;" } });
 			qTextRow.createSpan({ text: q.number + ". ", attr: { style: "font-weight:700;" } });
@@ -3300,16 +3301,16 @@ export class MainSidebarView extends ItemView {
 					optRow.addEventListener("click", (e) => { if ((e.target as HTMLElement).tagName !== "INPUT") { cb.checked = !cb.checked; cb.checked ? selected.add(opt.label) : selected.delete(opt.label); updateMulti(); } });
 				}
 			} else if (q.type === "blank") {
-				const input = qEl.createEl("input", { cls: "qg-input-wide", attr: { type: "text", placeholder: "填写答案..." } });
+				const input = qEl.createEl("input", { cls: "qg-input-wide", attr: { type: "text", placeholder: t("填写答案...") } });
 				input.addEventListener("input", () => { this.answerAnswers.set(q.number, input.value.trim()); });
 			} else if (q.type === "essay") {
-				const ta = qEl.createEl("textarea", { attr: { style: "width:100%;min-height:80px;padding:8px;border-radius:4px;border:1px solid var(--background-modifier-border);resize:vertical;font-size:19px;line-height:1.7;box-sizing:border-box;", placeholder: "输入你的答案..." } });
+				const ta = qEl.createEl("textarea", { attr: { style: "width:100%;min-height:80px;padding:8px;border-radius:4px;border:1px solid var(--background-modifier-border);resize:vertical;font-size:19px;line-height:1.7;box-sizing:border-box;", placeholder: t("输入你的答案...") } });
 				ta.addEventListener("input", () => { this.answerAnswers.set(q.number, ta.value.trim()); });
 			}
 		}
 
 		const submitBtn = el.createDiv({ attr: { style: "margin-top:10px;text-align:center;" } });
-		const sb = submitBtn.createEl("button", { text: "提交答卷", attr: { class: "mod-cta", style: "padding:8px 24px;border-radius:4px;cursor:pointer;font-size:20px;" } });
+		const sb = submitBtn.createEl("button", { text: t("提交答卷"), attr: { class: "mod-cta", style: "padding:8px 24px;border-radius:4px;cursor:pointer;font-size:20px;" } });
 		sb.addEventListener("click", () => this.answerSubmit());
 	}
 
@@ -3318,7 +3319,7 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 重新答题", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
+		const backBtn = el.createEl("button", { text: t("← 重新答题"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
 		backBtn.addEventListener("click", () => { this.answerAnswers = new Map(); this.answerWrongChecked = new Set(); this.renderAnswerView(); });
 
 		const gradable = this.answerQuestions.filter(q => q.type === "single" || q.type === "multi" || q.type === "judge");
@@ -3341,18 +3342,18 @@ export class MainSidebarView extends ItemView {
 		const scoreCard = el.createDiv({ attr: { style: "text-align:center;padding:16px;margin-bottom:14px;border-radius:8px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);" } });
 		if (score >= 0) {
 			const scoreColor = score >= 80 ? "var(--color-green)" : score >= 60 ? "var(--color-yellow)" : "var(--color-red)";
-			scoreCard.createDiv({ text: score + " 分", attr: { style: "font-size:36px;font-weight:bold;color:" + scoreColor + ";line-height:1.2;" } });
-			scoreCard.createDiv({ text: "客观题 " + totalGradable + " 题：正确 " + correct + " / 错误 " + wrongList.length, attr: { style: "color:var(--text-muted);margin-top:6px;font-size:19px;" } });
+			scoreCard.createDiv({ text: tf("{n} 分", { n: score }), attr: { style: "font-size:36px;font-weight:bold;color:" + scoreColor + ";line-height:1.2;" } });
+			scoreCard.createDiv({ text: tf("客观题 {n} 题：正确 {c} / 错误 {w}", { n: totalGradable, c: correct, w: wrongList.length }), attr: { style: "color:var(--text-muted);margin-top:6px;font-size:19px;" } });
 		}
-		if (nonGradable.length > 0) scoreCard.createDiv({ text: "主观题 " + nonGradable.length + " 题：请对照参考答案自查", attr: { style: "color:var(--text-faint);margin-top:4px;font-size:18px;" } });
+		if (nonGradable.length > 0) scoreCard.createDiv({ text: tf("主观题 {n} 题：请对照参考答案自查", { n: nonGradable.length }), attr: { style: "color:var(--text-faint);margin-top:4px;font-size:18px;" } });
 
 		const selectRow = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin:4px 0 6px;" } });
-		selectRow.createSpan({ text: "勾选要加入错题本的题目：", attr: { style: "color:var(--text-muted);font-size:17px;" } });
-		const selectBtn = selectRow.createEl("button", { text: "全选", attr: { style: "padding:3px 14px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+		selectRow.createSpan({ text: t("勾选要加入错题本的题目："), attr: { style: "color:var(--text-muted);font-size:17px;" } });
+		const selectBtn = selectRow.createEl("button", { text: t("全选"), attr: { style: "padding:3px 14px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 		const checkboxes: HTMLInputElement[] = [];
 		const updateSelectBtn = () => {
 			const allChecked = checkboxes.length > 0 && checkboxes.every(c => c.checked);
-			selectBtn.setText(allChecked ? "取消全选" : "全选");
+			selectBtn.setText(allChecked ? t("取消全选") : t("全选"));
 		};
 		selectBtn.addEventListener("click", () => {
 			const allChecked = checkboxes.length > 0 && checkboxes.every(c => c.checked);
@@ -3364,10 +3365,10 @@ export class MainSidebarView extends ItemView {
 			updateSelectBtn();
 		});
 
-		const typeLabels: Record<QuestionType, string> = { single: "单选", multi: "多选", judge: "判断", blank: "填空", essay: "简答" };
+		const typeLabels: Record<QuestionType, string> = { single: t("单选"), multi: t("多选"), judge: t("判断"), blank: t("填空"), essay: t("简答") };
 
 		if (gradable.length > 0) {
-			el.createDiv({ text: "客观题详情", attr: { style: "font-size:19px;font-weight:600;margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--background-modifier-border);" } });
+			el.createDiv({ text: t("客观题详情"), attr: { style: "font-size:19px;font-weight:600;margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--background-modifier-border);" } });
 			for (const q of gradable) {
 				const userAnswer = this.answerAnswers.get(q.number) || "";
 				let isCorrect = false;
@@ -3383,7 +3384,7 @@ export class MainSidebarView extends ItemView {
 				wCb.checked = this.answerWrongChecked.has(q.number);
 				wCb.addEventListener("change", () => { wCb.checked ? this.answerWrongChecked.add(q.number) : this.answerWrongChecked.delete(q.number); updateSelectBtn(); });
 				checkboxes.push(wCb);
-				qHeader.createSpan({ text: isCorrect ? "✓ 正确" : "✗ 错误", attr: { style: "font-size:17px;padding:2px 6px;border-radius:4px;font-weight:600;" + (isCorrect ? "background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);" : "background:color-mix(in srgb, var(--color-red) 15%, transparent);color:var(--color-red);") } });
+				qHeader.createSpan({ text: isCorrect ? t("✓ 正确") : t("✗ 错误"), attr: { style: "font-size:17px;padding:2px 6px;border-radius:4px;font-weight:600;" + (isCorrect ? "background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);" : "background:color-mix(in srgb, var(--color-red) 15%, transparent);color:var(--color-red);") } });
 				qHeader.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;color:var(--text-muted);" } });
 
 				const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
@@ -3401,13 +3402,13 @@ export class MainSidebarView extends ItemView {
 
 				if (q.answer) {
 					const refLabel = qEl.createDiv({ attr: { style: "margin-top:4px;" } });
-					refLabel.createDiv({ text: "参考答案", attr: { style: "font-size:18px;font-weight:700;color:#2E7D32;margin-bottom:2px;" } });
+					refLabel.createDiv({ text: t("参考答案"), attr: { style: "font-size:18px;font-weight:700;color:#2E7D32;margin-bottom:2px;" } });
 					const steps = splitAnswerContent(q.answer);
 					for (const step of steps) qEl.createDiv({ text: step, attr: { style: "font-size:18px;line-height:1.6;" } });
 				}
 				if (q.explanation) {
 					const expLabel = qEl.createDiv({ attr: { style: "margin-top:4px;" } });
-					expLabel.createDiv({ text: "考点解析", attr: { style: "font-size:18px;font-weight:700;color:#1565C0;margin-bottom:2px;" } });
+					expLabel.createDiv({ text: t("考点解析"), attr: { style: "font-size:18px;font-weight:700;color:#1565C0;margin-bottom:2px;" } });
 					const expLines = splitAnswerContent(q.explanation);
 					for (const line of expLines) qEl.createDiv({ text: line, attr: { style: "font-size:17px;line-height:1.6;color:var(--text-muted);" } });
 				}
@@ -3415,7 +3416,7 @@ export class MainSidebarView extends ItemView {
 		}
 
 		if (nonGradable.length > 0) {
-			el.createDiv({ text: "主观题参考答案", attr: { style: "font-size:19px;font-weight:600;margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--background-modifier-border);" } });
+			el.createDiv({ text: t("主观题参考答案"), attr: { style: "font-size:19px;font-weight:600;margin:12px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--background-modifier-border);" } });
 			for (const q of nonGradable) {
 				const userAnswer = this.answerAnswers.get(q.number) || "";
 				const qEl = el.createDiv({ attr: { style: "border:1px solid var(--interactive-accent);border-radius:8px;padding:10px 12px;margin-bottom:8px;" } });
@@ -3431,18 +3432,18 @@ export class MainSidebarView extends ItemView {
 				qTextRow.createSpan({ text: q.number + ". ", attr: { style: "font-weight:700;" } });
 				qTextRow.createSpan({ text: q.text });
  				if (userAnswer) {
-					qEl.createDiv({ text: "你的答案：", attr: { style: "font-size:17px;color:var(--text-muted);margin-bottom:2px;" } });
+					qEl.createDiv({ text: tf("你的答案：{a}", { a: userAnswer }), attr: { style: "font-size:17px;color:var(--text-muted);margin-bottom:2px;" } });
 					qEl.createDiv({ text: userAnswer, attr: { style: "padding:6px 10px;border-radius:4px;background:var(--background-secondary);font-size:19px;line-height:1.7;white-space:pre-wrap;" } });
 				}
 				if (q.answer) {
 					const refAns = qEl.createDiv({ attr: { style: "margin-top:6px;" } });
-					refAns.createDiv({ text: "参考答案", attr: { style: "font-size:17px;color:#2E7D32;font-weight:700;margin-bottom:2px;" } });
+					refAns.createDiv({ text: t("参考答案"), attr: { style: "font-size:17px;color:#2E7D32;font-weight:700;margin-bottom:2px;" } });
 					const steps = splitAnswerContent(q.answer);
 					for (const step of steps) refAns.createDiv({ text: step, attr: { style: "padding:3px 10px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 8%, transparent);font-size:19px;line-height:1.7;" } });
 				}
 				if (q.explanation) {
 					const expEl = qEl.createDiv({ cls: "qg-exp-top" });
-					expEl.createDiv({ text: "考点解析", cls: "qg-exp-title" });
+					expEl.createDiv({ text: t("考点解析"), cls: "qg-exp-title" });
 					const expLines = splitAnswerContent(q.explanation);
 					for (const line of expLines) expEl.createDiv({ text: line, cls: "qg-exp-line" });
 				}
@@ -3451,19 +3452,19 @@ export class MainSidebarView extends ItemView {
 
 		if (this.answerQuestions.length > 0) {
 			const wrongBtnRow = el.createDiv({ cls: "qg-mt10" });
-			const wrongBtn = wrongBtnRow.createEl("button", { text: "加入错题本", attr: { class: "mod-cta" }, cls: "qg-wrong-btn" });
+			const wrongBtn = wrongBtnRow.createEl("button", { text: t("加入错题本"), attr: { class: "mod-cta" }, cls: "qg-wrong-btn" });
 			const wrongArea = el.createDiv({ cls: "qg-wrong-area qg-hidden" });
 			const questionsText = this.answerQuestions.map(q => q.text).join("\n");
-			wrongArea.createDiv({ text: "知识点标签（可编辑）：", cls: "qg-label-text" });
-			const tagsInput = wrongArea.createEl("input", { attr: { type: "text", value: "", placeholder: "AI识别中，点击“加入错题本”后自动识别", style: "width:100%;padding:6px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:6px;font-size:18px;" } });
-			wrongArea.createDiv({ text: "备注：", attr: { style: "font-size:18px;margin-bottom:4px;" } });
-			const noteArea = wrongArea.createEl("textarea", { attr: { style: "width:100%;height:40px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;", placeholder: "例如：第3、7题做错了" } });
-			const confirmWrongBtn = wrongArea.createEl("button", { text: "确认加入", attr: { class: "mod-cta", style: "padding:5px 14px;border-radius:4px;cursor:pointer;font-size:18px;margin-top:4px;" } });
+			wrongArea.createDiv({ text: t("知识点标签（可编辑）："), cls: "qg-label-text" });
+			const tagsInput = wrongArea.createEl("input", { attr: { type: "text", value: "", placeholder: t("AI识别中，点击“加入错题本”后自动识别"), style: "width:100%;padding:6px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:6px;font-size:18px;" } });
+			wrongArea.createDiv({ text: t("备注："), attr: { style: "font-size:18px;margin-bottom:4px;" } });
+			const noteArea = wrongArea.createEl("textarea", { attr: { style: "width:100%;height:40px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;", placeholder: t("例如：第3、7题做错了") } });
+			const confirmWrongBtn = wrongArea.createEl("button", { text: t("确认加入"), attr: { class: "mod-cta", style: "padding:5px 14px;border-radius:4px;cursor:pointer;font-size:18px;margin-top:4px;" } });
 			confirmWrongBtn.addEventListener("click", () => {
 				void (async () => {
 					this.answerCurrentTags = tagsInput.value.split(",").map(s => s.trim()).filter(Boolean);
 					const checked = this.answerWrongChecked.size > 0 ? this.answerQuestions.filter(q => this.answerWrongChecked.has(q.number)) : wrongList;
-					if (checked.length === 0) { new Notice("请先勾选要加入错题本的题目"); return; }
+					if (checked.length === 0) { new Notice(t("请先勾选要加入错题本的题目")); return; }
 					await this.answerSaveWrongToBook(checked, noteArea.value);
 					wrongArea.classList.add("qg-hidden");
 				})();
@@ -3473,7 +3474,7 @@ export class MainSidebarView extends ItemView {
 				wrongArea.classList.toggle("qg-hidden");
 				if (!tagsSuggested) {
 					tagsSuggested = true;
-					tagsInput.placeholder = "AI识别知识点中...";
+					tagsInput.placeholder = t("AI识别知识点中...");
 					this.resetAI();
 					void this.aiSuggestTags(questionsText).then(tags => {
 						if (tagsInput.value.trim() === "") tagsInput.value = tags.join(", ");
@@ -3483,7 +3484,7 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const homeBtn = el.createDiv({ cls: "qg-home-btn" });
-		const hb = homeBtn.createEl("button", { text: "返回首页", cls: "qg-btn-home" });
+		const hb = homeBtn.createEl("button", { text: t("返回首页"), cls: "qg-btn-home" });
 		hb.addEventListener("click", () => { this.homeView = "default"; void this.renderHomeTab(); });
 	}
 
@@ -3531,10 +3532,10 @@ export class MainSidebarView extends ItemView {
 				try { await this.app.vault.create(this.plugin.rootPath(this.plugin.settings.wrongBookFolder) + "/" + fileName, content); }
 				catch { await this.app.vault.create(this.plugin.rootPath(this.plugin.settings.wrongBookFolder) + "/" + safeName(this.answerSourceName) + "_错题_" + Date.now() + ".md", content); }
 			}
-			new Notice("已自动将 " + wrongList.length + " 道错题加入错题本");
+			new Notice(tf("已自动将 {n} 道错题加入错题本", { n: wrongList.length }));
 			this.plugin.emitDataChanged();
 			this.syncToKnowledgeIndex(tags, fileName.replace(/\.md$/, ""), joinPath(this.plugin.rootPath(this.plugin.settings.wrongBookFolder), fileName), "错题");
-		} catch (err) { new Notice("加入错题本失败：" + (err as Error).message); console.error("[question-generator] 加入错题本失败:", err); }
+		} catch (err) { new Notice(tf("加入错题本失败：{msg}", { msg: (err as Error).message })); console.error("[question-generator] 加入错题本失败:", err); }
 	}
 
 	// ===================== HELPERS =====================
@@ -3548,7 +3549,7 @@ export class MainSidebarView extends ItemView {
 		}
 		const byName = this.app.vault.getFiles().find(f => f.basename === clean || f.name === linkText || f.path === linkText);
 		if (byName) { this.app.workspace.openLinkText(byName.path, "", false).catch(() => {}); return; }
-		new Notice("找不到文件：" + linkText);
+		new Notice(tf("找不到文件：{name}", { name: linkText }));
 	}
 
 	renderKnowledgeTags(container: HTMLElement, tags: string[], maxVisible = 3) {
@@ -3569,19 +3570,19 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.homeView = "default"; void this.renderHomeTab(); });
 
 		const headerRow = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin-bottom:10px;" } });
-		headerRow.createDiv({ text: "生成历史记录", attr: { style: "font-size:20px;font-weight:bold;flex:1;" } });
+		headerRow.createDiv({ text: t("生成历史记录"), attr: { style: "font-size:20px;font-weight:bold;flex:1;" } });
 
 		const entries = this.plugin.history.slice().sort((a, b) => b.timestamp - a.timestamp);
 		if (entries.length === 0) {
-			el.createDiv({ text: "暂无生成历史", attr: { style: "color:var(--text-muted);text-align:center;padding:40px 0;font-size:18px;" } });
+			el.createDiv({ text: t("暂无生成历史"), attr: { style: "color:var(--text-muted);text-align:center;padding:40px 0;font-size:18px;" } });
 			return;
 		}
 
-		const clearBtn = headerRow.createEl("button", { text: "清空历史", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+		const clearBtn = headerRow.createEl("button", { text: t("清空历史"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
 		clearBtn.addEventListener("click", () => { this.plugin.history = []; void this.plugin.saveHistory(); void this.renderHistoryView(); });
 
 		const listEl = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:8px;" } });
@@ -3591,7 +3592,7 @@ export class MainSidebarView extends ItemView {
 			head.createSpan({ text: entry.fileName, attr: { style: "font-weight:600;font-size:17px;flex:1;word-break:break-all;" } });
 			head.createSpan({ text: new Date(entry.timestamp).toLocaleString(), attr: { style: "color:var(--text-faint);font-size:15px;flex-shrink:0;" } });
 			if (entry.sourcePath) {
-				card.createDiv({ text: "来源：" + entry.sourcePath, attr: { style: "padding:0 10px 6px;color:var(--text-muted);font-size:16px;word-break:break-all;" } });
+				card.createDiv({ text: tf("来源：{s}", { s: entry.sourcePath }), attr: { style: "padding:0 10px 6px;color:var(--text-muted);font-size:16px;word-break:break-all;" } });
 			}
 			const body = card.createDiv({ attr: { style: "display:none;border-top:1px solid var(--background-modifier-border);padding:8px 10px;" } });
 			const ta = body.createEl("textarea", { attr: { style: "width:100%;height:180px;font-family:monospace;font-size:17px;line-height:1.5;" } });
@@ -3615,7 +3616,7 @@ export class MainSidebarView extends ItemView {
 	async openCurrentFileExtract(file?: TFile) {
 		const target = file ?? this.app.workspace.getActiveFile();
 		const ext = target ? target.extension.toLowerCase() : "";
-		if (!target || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice("请打开一个支持的试卷文件（md/txt/rtf/docx/pdf/图片）"); return; }
+		if (!target || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice(t("请打开一个支持的试卷文件（md/txt/rtf/docx/pdf/图片）")); return; }
 
 		const cfg = this.plugin.settings;
 		const saveFolder = this.plugin.rootPath(cfg.extractedExamFolder || "题目/识别试卷");
@@ -3623,13 +3624,13 @@ export class MainSidebarView extends ItemView {
 
 		this.examProcessing = true;
 		this.resetAI();
-		this.examStatusText = "正在识别当前文件 " + target.name + "...";
+		this.examStatusText = tf("正在识别当前文件 {name}...", { name: target.name });
 		this.homeView = "examBrowser";
 		void this.renderHomeTab();
 
 		try {
 			const content = await this.examSourceToText(target);
-			if (!content || content.trim().length === 0) { new Notice("未能读取文件内容"); return; }
+			if (!content || content.trim().length === 0) { new Notice(t("未能读取文件内容")); return; }
 
 			let allQuestionsText = "";
 			if (isImageFile(target.name)) {
@@ -3645,19 +3646,19 @@ export class MainSidebarView extends ItemView {
 				}
 			for (let ci = 0; ci < chunks.length; ci++) {
 				if (this.aiCancelled) break;
-				this.examStatusText = "正在识别当前文件 " + target.name + " - 第" + (ci + 1) + "/" + chunks.length + "段...";
+				this.examStatusText = tf("正在识别当前文件 {name} - 第{s}/{e}段...", { name: target.name, s: ci + 1, e: chunks.length });
 				void this.renderHomeTab();
 				const full = await this.callAIWithPrompt(buildExamExtractPrompt(chunks[ci]!, ci + 1, chunks.length));
 				if (full) allQuestionsText += "\n\n" + full;
 			}
 			if (this.aiCancelled) return;
 		}
-		if (!allQuestionsText.trim()) { new Notice("未能识别出题目"); return; }
+		if (!allQuestionsText.trim()) { new Notice(t("未能识别出题目")); return; }
 
 			const mergedText = mergeExamChunks(allQuestionsText);
 
 			const questions = parseQuestions(mergedText);
-			if (questions.length === 0) { new Notice("未能识别出题目"); return; }
+			if (questions.length === 0) { new Notice(t("未能识别出题目")); return; }
 
 			const { cleanText } = parseAITagsFromResult(allQuestionsText);
 			const aiTags = await this.aiSuggestTags(mergedText);
@@ -3679,13 +3680,13 @@ export class MainSidebarView extends ItemView {
 
 			this.examSelected.clear();
 			this.examStatusText = "";
-			new Notice("识别完成，共 " + questions.length + " 题，已保存至 " + saveFolder);
+			new Notice(tf("识别完成，共 {n} 题，已保存至 {path}", { n: questions.length, path: saveFolder }));
 			this.startAnswer(normalized, target.basename + " - AI识别", savePath);
 		} catch (err) {
 			if ((err as Error).name === "AbortError") {
-				if (this.aiCancelled) this.examStatusText = "已中止";
+				if (this.aiCancelled) this.examStatusText = t("已中止");
 			} else {
-				new Notice("识别失败：" + (err as Error).message);
+				new Notice(tf("识别失败：{msg}", { msg: (err as Error).message }));
 			}
 		} finally {
 			this.examProcessing = false;
@@ -3751,20 +3752,20 @@ class KnowledgeDeleteConfirmModal extends Modal {
 		contentEl.empty();
 		contentEl.classList.add("qg-confirm-modal");
 
-		contentEl.createDiv({ text: this.isBulk ? "删除选中的 " + this.indexFiles.length + " 个索引文件" : "删除知识点： " + this.title, attr: { style: "font-size:18px;font-weight:700;margin-bottom:12px;" } });
+		contentEl.createDiv({ text: this.isBulk ? tf("删除选中的 {n} 个索引文件", { n: this.indexFiles.length }) : tf("删除知识点： {name}", { name: this.title }), attr: { style: "font-size:18px;font-weight:700;margin-bottom:12px;" } });
 		if (this.isBulk) {
-			contentEl.createDiv({ text: "将删除以下知识点： " + this.title, attr: { style: "font-size:15px;color:var(--text-muted);margin-bottom:8px;word-break:break-all;line-height:1.6;" } });
+			contentEl.createDiv({ text: t("将删除以下知识点： ") + this.title, attr: { style: "font-size:15px;color:var(--text-muted);margin-bottom:8px;word-break:break-all;line-height:1.6;" } });
 		}
-		contentEl.createDiv({ text: "将同时删除以下 " + this.indexFiles.length + " 个索引文件：", attr: { style: "font-size:15px;color:var(--text-muted);margin-bottom:8px;" } });
+		contentEl.createDiv({ text: tf("将同时删除以下 {n} 个索引文件：", { n: this.indexFiles.length }), attr: { style: "font-size:15px;color:var(--text-muted);margin-bottom:8px;" } });
 
 		const listEl = contentEl.createDiv({ attr: { style: "max-height:200px;overflow:auto;background:var(--background-secondary);border:1px solid var(--background-modifier-border);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:14px;line-height:1.8;" } });
 		for (const f of this.indexFiles) listEl.createDiv({ text: "· " + f, attr: { style: "word-break:break-all;" } });
-		contentEl.createDiv({ text: "此操作不可恢复，是否继续？", attr: { style: "font-size:15px;color:var(--text-accent);margin-bottom:24px;" } });
+		contentEl.createDiv({ text: t("此操作不可恢复，是否继续？"), attr: { style: "font-size:15px;color:var(--text-accent);margin-bottom:24px;" } });
 
 		const btnRow = contentEl.createDiv({ attr: { style: "display:flex;justify-content:flex-end;gap:8px;" } });
-		const cancelBtn = btnRow.createEl("button", { text: "取消", attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:15px;" } });
+		const cancelBtn = btnRow.createEl("button", { text: t("取消"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:15px;" } });
 		cancelBtn.addEventListener("click", () => this.close());
-		const okBtn = btnRow.createEl("button", { text: "删除", attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--color-red);background:var(--color-red);color:var(--text-on-accent);font-size:15px;" } });
+		const okBtn = btnRow.createEl("button", { text: t("删除"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--color-red);background:var(--color-red);color:var(--text-on-accent);font-size:15px;" } });
 		okBtn.addEventListener("click", () => { this.confirmed = true; this.close(); });
 	}
 
