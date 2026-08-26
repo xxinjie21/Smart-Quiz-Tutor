@@ -30,8 +30,8 @@ export type ExamBlock =
 	| { type: "explanation"; parts: string[]; hasInline: boolean }
 	| { type: "text"; parts: [string]; hasInline: true };
 
-const EXAM_ANSWER_LINE = /^(?:\*\*)?(?:答案|标准答案|参考答案)(?:\*\*)?[：:]/;
-const EXAM_EXPLAIN_LINE = /^(?:\*\*)?解析(?:\*\*)?[：:]/;
+const EXAM_ANSWER_LINE = /^(?:\*\*)?(?:答案|标准答案|参考答案|Answer|Reference Answer)(?:\*\*)?[：:]/i;
+const EXAM_EXPLAIN_LINE = /^(?:\*\*)?(?:解析|Explanation)(?:\*\*)?[：:]/i;
 const EXAM_NUM_LINE = /^\d+[.、]/;
 const EXAM_HEADING_LINE = /^#{1,6}\s+/;
 
@@ -61,12 +61,12 @@ export function parseExamBlocks(text: string): ExamBlock[] {
 			blocks.push({ type: "subitem", parts: [trimmed], hasInline: true });
 			continue;
 		}
-		if (/^[*>\s]*补充说明[：:]/.test(trimmed)) {
+		if (/^[*>\s]*(?:补充说明|Note)[：:]/.test(trimmed)) {
 			blocks.push({ type: "note", parts: [trimmed.replace(/^[*>\s]+/, "").replace(/[*\s]+$/, "").trim()], hasInline: true });
 			continue;
 		}
 		if (EXAM_ANSWER_LINE.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案)(?:\*\*)?([：:])(.*)/);
+			const match = trimmed.match(/^(?:\*\*)?(答案|标准答案|参考答案|Answer|Reference Answer)(?:\*\*)?([：:])(.*)/i);
 			const label = match ? (match[1] || "答案") + (match[2] || "：") : "答案：";
 			const inlineContent = match ? (match[3] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
 			const steps = splitAnswerContent(inlineContent);
@@ -75,15 +75,15 @@ export function parseExamBlocks(text: string): ExamBlock[] {
 			continue;
 		}
 		if (EXAM_EXPLAIN_LINE.test(trimmed)) {
-			const match = trimmed.match(/^(?:\*\*)?解析(?:\*\*)?([：:])(.*)/);
-			const label = match ? "解析" + (match[1] || "：") : "解析：";
-			const content = match ? (match[2] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
+			const match = trimmed.match(/^(?:\*\*)?(解析|Explanation)(?:\*\*)?([：:])(.*)/i);
+			const label = match ? (match[1] || "解析") + (match[2] || "：") : "解析：";
+			const content = match ? (match[3] || "").trim().replace(/^\*{1,2}/, "").replace(/\*{1,2}$/, "").trim() : "";
 			const lines: string[] = [label];
 			if (content) lines.push(...splitSemantic(content));
 			while (i < rawLines.length) {
 				const next = rawLines[i]!.trim();
 				if (next === "") { i++; continue; }
-				if (EXAM_NUM_LINE.test(next) || EXAM_HEADING_LINE.test(next) || /^(答案|标准答案|参考答案)[：:]/.test(next)) break;
+				if (EXAM_NUM_LINE.test(next) || EXAM_HEADING_LINE.test(next) || /^(?:答案|标准答案|参考答案|Answer|Reference Answer)[：:]/.test(next)) break;
 				lines.push(...splitSemantic(next));
 				i++;
 			}
