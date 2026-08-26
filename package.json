@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-question-generator",
-	"version": "2.0.1",
+	"version": "2.1.0",
 	"description": "智学助手 — AI-powered question generator for Obsidian, supports Ollama/OpenAI, SM-2 spaced repetition, and exam-format export",
 	"main": "main.js",
 	"type": "module",
