@@ -87,8 +87,9 @@ if (prod) {
 	const hasScriptInjection = SCRIPT_RE.test(code);
 	SCRIPT_RE.lastIndex = 0;
 	if (hasScriptInjection) {
-		// setimmediate: "document"in global&&"onreadystatechange"in global.document.createElement("script") ? injectScript :setTimeout fallback
-		code = code.replace(/\):"document"in global&&"onreadystatechange"in global\.document\.createElement\("script"\)\?[\s\S]{0,700}?ax=function\(\)\{setTimeout\((\w+),0\)\}/, '):ax=function(){setTimeout($1,0)}');
+		// setimmediate: "document"in global&&"onreadystatechange"in global.document.createElement("script") ? injectScript : setTimeout fallback
+		// NOTE: variable names (ax/lx/...) are minifier-chosen and change between builds; match generically
+		code = code.replace(/\):"document"in global&&"onreadystatechange"in global\.document\.createElement\("script"\)\?[\s\S]{0,700}?:(\w+)=function\(\)\{setTimeout\((\w+),0\)\}/, '):$1=function(){setTimeout($2,0)}');
 		// setimmediate: dead `function m(){... a.createElement("script") ...}` never wired into the scheduler chain
 		code = code.replace(/function m\(\)\{var v=\w+\.documentElement;[\s\S]{0,300}?\w+\.createElement\("script"\)[\s\S]{0,300}?\}\}/, 'function m(){}');
 	}
