@@ -1550,30 +1550,30 @@ export class MainSidebarView extends ItemView {
 			return inp;
 		};
 
-		section("文件夹");
-		el.createDiv({ text: "根文件夹下包含所有模块子文件夹，修改后需重启插件生效", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
-		textInput(fieldRow("根文件夹"), s.rootFolder, v => { s.rootFolder = v; }, "智学助手");
-		textInput(fieldRow("题目文件夹"), s.questionFolder, v => { s.questionFolder = v; });
-		textInput(fieldRow("错题文件夹"), s.wrongBookFolder, v => { s.wrongBookFolder = v; });
-		textInput(fieldRow("笔记文件夹"), s.noteViewFolder, v => { s.noteViewFolder = v; }, "笔记");
-		textInput(fieldRow("知识点文件夹"), s.knowledgeFolder, v => { s.knowledgeFolder = v; }, "知识点");
-		textInput(fieldRow("转换md文件夹"), s.convertedMdFolder, v => { s.convertedMdFolder = v; }, "md文件");
-		textInput(fieldRow("AI识别文件夹"), s.extractedExamFolder, v => { s.extractedExamFolder = v; }, "题目/识别试卷");
-		textInput(fieldRow("排除文件夹"), s.excludeFolders, v => { s.excludeFolders = v; });
+		section(t("文件夹"));
+		el.createDiv({ text: t("根文件夹下包含所有模块子文件夹，修改后需重启插件生效"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
+		textInput(fieldRow(t("根文件夹")), s.rootFolder, v => { s.rootFolder = v; }, "智学助手");
+		textInput(fieldRow(t("题目文件夹")), s.questionFolder, v => { s.questionFolder = v; });
+		textInput(fieldRow(t("错题文件夹")), s.wrongBookFolder, v => { s.wrongBookFolder = v; });
+		textInput(fieldRow(t("笔记文件夹")), s.noteViewFolder, v => { s.noteViewFolder = v; }, "笔记");
+		textInput(fieldRow(t("知识点文件夹")), s.knowledgeFolder, v => { s.knowledgeFolder = v; }, "知识点");
+		textInput(fieldRow(t("转换md文件夹")), s.convertedMdFolder, v => { s.convertedMdFolder = v; }, "md文件");
+		textInput(fieldRow(t("AI识别文件夹")), s.extractedExamFolder, v => { s.extractedExamFolder = v; }, "题目/识别试卷");
+		textInput(fieldRow(t("排除文件夹")), s.excludeFolders, v => { s.excludeFolders = v; });
 		const asRow = fieldRow("");
 		const asCb = asRow.createEl("input", { attr: { type: "checkbox" } });
 		asCb.checked = s.autoSave;
 		asCb.addEventListener("change", () => { s.autoSave = asCb.checked; void this.plugin.saveSettings(); });
-		asRow.createSpan({ text: "生成后自动保存到题库" });
-		el.createDiv({ text: "预期目录结构：\n根文件夹/\n├─ 题目/（含 识别试卷/）\n├─ 错题/\n├─ 笔记/\n├─ 知识点/（统一索引，含相关题目/相关笔记/相关错题三段）\n└─ md文件/", attr: { style: "color:var(--text-muted);font-size:16px;line-height:1.6;margin-top:10px;padding:10px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);white-space:pre-wrap;" } });
+		asRow.createSpan({ text: t("生成后自动保存到题库") });
+		el.createDiv({ text: t("预期目录结构：\n根文件夹/\n├─ 题目/（含 识别试卷/）\n├─ 错题/\n├─ 笔记/\n├─ 知识点/（统一索引，含相关题目/相关笔记/相关错题三段）\n└─ md文件/"), attr: { style: "color:var(--text-muted);font-size:16px;line-height:1.6;margin-top:10px;padding:10px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);white-space:pre-wrap;" } });
 
-		section("默认题目数量");
+		section(t("默认题目数量"));
 		const counts = [
-			{ label: "单选题", key: "countSingle" as const },
-			{ label: "多选题", key: "countMulti" as const },
-			{ label: "判断题", key: "countJudge" as const },
-			{ label: "填空题", key: "countBlank" as const },
-			{ label: "简答题", key: "countEssay" as const },
+			{ label: t("单选题"), key: "countSingle" as const },
+			{ label: t("多选题"), key: "countMulti" as const },
+			{ label: t("判断题"), key: "countJudge" as const },
+			{ label: t("填空题"), key: "countBlank" as const },
+			{ label: t("简答题"), key: "countEssay" as const },
 		];
 		const countGrid = el.createDiv({ attr: { style: "display:grid;grid-template-columns:1fr 1fr;gap:6px;" } });
 		for (const c of counts) {
@@ -1581,27 +1581,27 @@ export class MainSidebarView extends ItemView {
 			row.createSpan({ text: c.label, attr: { style: "min-width:50px;color:var(--text-muted);" } });
 			const inp = row.createEl("input", { attr: { type: "number", min: "0", max: "50", value: String(s[c.key]), style: "width:50px;padding:4px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
 			inp.addEventListener("change", () => { s[c.key] = parseInt(inp.value) || 0; void this.plugin.saveSettings(); });
-			row.createSpan({ text: "题", attr: { style: "color:var(--text-muted);" } });
+			row.createSpan({ text: t("题"), attr: { style: "color:var(--text-muted);" } });
 		}
 
-		section("API 配置");
-		const apiTypeRow = fieldRow("接口类型");
+		section(t("API 配置"));
+		const apiTypeRow = fieldRow(t("接口类型"));
 		const apiTypeSel = apiTypeRow.createEl("select", { attr: { style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
 		apiTypeSel.createEl("option", { value: "ollama", text: "Ollama" });
-		apiTypeSel.createEl("option", { value: "openai", text: "OpenAI兼容" });
+		apiTypeSel.createEl("option", { value: "openai", text: t("OpenAI兼容") });
 		apiTypeSel.value = s.apiType;
 		apiTypeSel.addEventListener("change", () => { s.apiType = apiTypeSel.value as "ollama" | "openai"; void this.plugin.saveSettings(); });
-		textInput(fieldRow("接口地址"), s.baseUrl, v => { s.baseUrl = v; });
-		textInput(fieldRow("模型名称"), s.modelName, v => { s.modelName = v; });
-		textInput(fieldRow("API Key"), s.apiKey || "", v => { s.apiKey = v; });
+		textInput(fieldRow(t("接口地址")), s.baseUrl, v => { s.baseUrl = v; });
+		textInput(fieldRow(t("模型名称")), s.modelName, v => { s.modelName = v; });
+		textInput(fieldRow(t("API Key")), s.apiKey || "", v => { s.apiKey = v; });
 		const tempRow = fieldRow("Temperature");
 		const tempInput = tempRow.createEl("input", { attr: { type: "number", min: "0", max: "2", step: "0.1", value: String(s.temperature), style: "width:60px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
 		tempInput.addEventListener("change", () => { s.temperature = parseFloat(tempInput.value) || 0.1; void this.plugin.saveSettings(); });
 		tempRow.createSpan({ text: String(s.temperature), attr: { id: "pg-temp-val", style: "color:var(--text-muted);min-width:30px;" } });
 		tempInput.addEventListener("input", () => { const v = tempRow.querySelector("#pg-temp-val"); if (v) v.textContent = tempInput.value; });
 
-		section("复习间隔设置");
-		el.createDiv({ text: "参数越大复习间隔越长，记忆越牢固但可能遗忘；参数越小复习越频繁，短期效果好但耗时多。推荐使用默认值。", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:10px;line-height:1.5;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
+		section(t("复习间隔设置"));
+		el.createDiv({ text: t("参数越大复习间隔越长，记忆越牢固但可能遗忘；参数越小复习越频繁，短期效果好但耗时多。推荐使用默认值。"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:10px;line-height:1.5;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
 
 		const renderIntervalRow = (label: string, currentValue: string, presetKey: string, onChange: (v: string) => void) => {
 			const row = el.createDiv({ attr: { style: "margin-bottom:14px;padding:10px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);" } });
@@ -1611,32 +1611,32 @@ export class MainSidebarView extends ItemView {
 			const currentPreset = presets.find(p => p.values === currentValue);
 			for (const p of presets) {
 				const isActive = p.values === currentValue;
-				const btn = btnRow.createEl("button", { text: p.label, cls: isActive ? "qg-interval-active" : undefined, attr: { style: "padding:3px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);" + (isActive ? "" : "background:var(--background-primary);color:var(--text-muted);") } });
+				const btn = btnRow.createEl("button", { text: t(p.label), cls: isActive ? "qg-interval-active" : undefined, attr: { style: "padding:3px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);" + (isActive ? "" : "background:var(--background-primary);color:var(--text-muted);") } });
 				btn.addEventListener("click", () => { onChange(p.values); void this.plugin.saveSettings(); row.parentElement && this.renderSettingsTab(); });
 			}
 			const activePreset = currentPreset || presets[1]!;
 			const tipRow = row.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:16px;color:var(--text-muted);" } });
 			tipRow.createSpan({ text: "💡", attr: { style: "font-size:14px;" } });
-			tipRow.createSpan({ text: activePreset.hint });
+			tipRow.createSpan({ text: t(activePreset.hint) });
 			const customRow = row.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;" } });
-			customRow.createSpan({ text: "自定义：", attr: { style: "font-size:16px;color:var(--text-muted);flex-shrink:0;" } });
-			const inp = customRow.createEl("input", { attr: { type: "text", value: currentValue, style: "flex:1;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:16px;font-family:monospace;", placeholder: "如 1,2,4,7,15,30" } });
+			customRow.createSpan({ text: t("自定义："), attr: { style: "font-size:16px;color:var(--text-muted);flex-shrink:0;" } });
+			const inp = customRow.createEl("input", { attr: { type: "text", value: currentValue, style: "flex:1;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:16px;font-family:monospace;", placeholder: t("如 1,2,4,7,15,30") } });
 			inp.addEventListener("change", () => { onChange(inp.value); void this.plugin.saveSettings(); });
 		};
 
-		renderIntervalRow("错题复习间隔（天）", s.wrongReviewIntervals, "wrong", v => { s.wrongReviewIntervals = v; });
-		renderIntervalRow("题目复习间隔（天）", s.questionReviewIntervals, "question", v => { s.questionReviewIntervals = v; });
-		renderIntervalRow("笔记复习间隔（天）", s.noteReviewIntervals, "note", v => { s.noteReviewIntervals = v; });
-		section("学习设置");
-		const wpRow = fieldRow("薄弱点阈值");
+		renderIntervalRow(t("错题复习间隔（天）"), s.wrongReviewIntervals, "wrong", v => { s.wrongReviewIntervals = v; });
+		renderIntervalRow(t("题目复习间隔（天）"), s.questionReviewIntervals, "question", v => { s.questionReviewIntervals = v; });
+		renderIntervalRow(t("笔记复习间隔（天）"), s.noteReviewIntervals, "note", v => { s.noteReviewIntervals = v; });
+		section(t("学习设置"));
+		const wpRow = fieldRow(t("薄弱点阈值"));
 		const wpInput = wpRow.createEl("input", { attr: { type: "number", min: "1", max: "20", value: String(s.weakPointThreshold), style: "width:60px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
 		wpInput.addEventListener("change", () => { s.weakPointThreshold = parseInt(wpInput.value) || 2; void this.plugin.saveSettings(); });
-		wpRow.createSpan({ text: "次以上错题标记为薄弱", attr: { style: "color:var(--text-muted);" } });
+		wpRow.createSpan({ text: t("次以上错题标记为薄弱"), attr: { style: "color:var(--text-muted);" } });
 		const rrRow = fieldRow("");
 		const rrCb = rrRow.createEl("input", { attr: { type: "checkbox" } });
 		rrCb.checked = s.autoReviewReminder;
 		rrCb.addEventListener("change", () => { s.autoReviewReminder = rrCb.checked; void this.plugin.saveSettings(); });
-		rrRow.createSpan({ text: "启动时提醒复习" });
+		rrRow.createSpan({ text: t("启动时提醒复习") });
 
 		window.requestAnimationFrame(() => { el.scrollTop = savedScrollTop; });
 	}
@@ -1647,16 +1647,16 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.fpSelected.clear(); this.homeView = "default"; void this.renderHomeTab(); });
 
-		el.createDiv({ text: "生成题目", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "选择vault中的文档，AI根据内容生成各类题目，生成后保存到题库", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
+		el.createDiv({ text: t("生成题目"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: t("选择vault中的文档，AI根据内容生成各类题目，生成后保存到题库"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
 
 		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
 		const modes: { key: "current" | "folder"; label: string }[] = [
-			{ key: "current", label: "当前文件" },
-			{ key: "folder", label: "从文件夹选择" },
+			{ key: "current", label: t("当前文件") },
+			{ key: "folder", label: t("从文件夹选择") },
 		];
 		for (const m of modes) {
 			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.genPickerMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -1667,13 +1667,13 @@ export class MainSidebarView extends ItemView {
 			const activeFile = this.app.workspace.getActiveFile();
 			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-				el.createDiv({ text: "请先打开一个文档（md/txt/rtf/docx/pdf/图片）", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+				el.createDiv({ text: t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
 			} else {
 				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
-				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: t("当前文件：") });
 				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);word-break:break-all;" } });
 				info.createDiv({ text: this.fileSizeInfo(activeFile), attr: { style: "color:var(--text-muted);font-size:16px;margin-top:2px;line-height:1.5;" } });
-				const processBtn = el.createEl("button", { text: "📝 基于当前文件生成题目", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
+				const processBtn = el.createEl("button", { text: t("📝 基于当前文件生成题目"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
 				processBtn.addEventListener("click", () => { void this.generateFromCurrentFile(); });
 			}
 		} else {
@@ -1682,7 +1682,7 @@ export class MainSidebarView extends ItemView {
 			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
 			infoEl.setText(this.selectInfoText(this.fpAllFiles, this.fpSelected));
 
-			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
+			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
 			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
 			const toolBtn = (label: string, cb: () => void) => {
@@ -1692,22 +1692,22 @@ export class MainSidebarView extends ItemView {
 
 			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
 			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-			const confirmBtn = btnRow.createEl("button", { text: "📝 生成题目（0个）", attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+			const confirmBtn = btnRow.createEl("button", { text: tf("📝 生成题目（{n}个）", { n: 0 }), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
 			confirmBtn.addEventListener("click", () => {
-				if (this.fpSelected.size === 0) { new Notice("请至少选择一个文件"); return; }
+				if (this.fpSelected.size === 0) { new Notice(t("请至少选择一个文件")); return; }
 				void this.generateFromSelected();
 			});
-			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+			const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); rerender(); });
 			const updateConfirm = () => {
 				const size = this.fpSelected.size;
-				confirmBtn.setText("📝 生成题目（" + size + "个）");
+				confirmBtn.setText(tf("📝 生成题目（{n}个）", { n: size }));
 				confirmBtn.style.opacity = size === 0 ? "0.5" : "1";
 				confirmBtn.style.pointerEvents = size === 0 ? "none" : "auto";
 			};
 			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm, this.fpExpanded); updateConfirm(); };
-			toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
-			toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
+			toolBtn(t("全选"), () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+			toolBtn(t("取消全选"), () => { this.fpSelected.clear(); rerender(); });
 			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
 			rerender();
 		}
@@ -1716,9 +1716,9 @@ export class MainSidebarView extends ItemView {
 	async generateFromCurrentFile() {
 		const file = this.app.workspace.getActiveFile();
 		const ext = file ? file.extension.toLowerCase() : "";
-		if (!file || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice("请打开一个支持的文档（md/txt/rtf/docx/PDF/图片）"); return; }
+		if (!file || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice(t("请打开一个支持的文档（md/txt/rtf/docx/PDF/图片）")); return; }
 		const text = await this.examSourceToText(file);
-		if (!text || text.trim().length === 0) { new Notice("未能读取文件内容"); return; }
+		if (!text || text.trim().length === 0) { new Notice(t("未能读取文件内容")); return; }
 		this.startGenerate(text, file.name, file.path);
 	}
 
@@ -1731,8 +1731,8 @@ export class MainSidebarView extends ItemView {
 			const text = await this.examSourceToText(f);
 			if (text && text.trim().length > 0) { combined += "\n\n---\n\n" + text; paths.push(f.path); }
 		}
-		if (paths.length === 0) { new Notice("所选文件均无法读取内容"); return; }
-		this.startGenerate(combined.trim(), paths.length + "个文档", paths.join(","));
+		if (paths.length === 0) { new Notice(t("所选文件均无法读取内容")); return; }
+		this.startGenerate(combined.trim(), tf("{n}个文档", { n: paths.length }), paths.join(","));
 	}
 
 	selectInfoText(files: TFile[], selected: Set<string>): string {
@@ -1740,8 +1740,8 @@ export class MainSidebarView extends ItemView {
 		let size = 0;
 		let toks = 0;
 		for (const f of sel) { size += f.stat.size; toks += this.fileTokenEstimate(f); }
-		const extra = sel.length > 0 ? "　已选≈" + Math.round(size / 1024).toLocaleString() + "KB · ≈" + toks.toLocaleString() + " token" : "";
-		return "共 " + files.length + " 个文档，已选 " + selected.size + " 个" + extra;
+		const extra = sel.length > 0 ? tf("　已选≈{s}KB · ≈{t} token", { s: Math.round(size / 1024).toLocaleString(), t: toks.toLocaleString() }) : "";
+		return tf("共 {a} 个文档，已选 {b} 个", { a: files.length, b: selected.size }) + extra;
 	}
 
 	fileTokenEstimate(f: TFile): number {
@@ -1752,7 +1752,7 @@ export class MainSidebarView extends ItemView {
 	}
 
 	fileSizeInfo(f: TFile): string {
-		return "大小：" + Math.round(f.stat.size / 1024).toLocaleString() + "KB　预估Token：≈" + this.fileTokenEstimate(f).toLocaleString();
+		return tf("大小：{s}KB　预估Token：≈{t}", { s: Math.round(f.stat.size / 1024).toLocaleString(), t: this.fileTokenEstimate(f).toLocaleString() });
 	}
 
 	renderSelectTree(listEl: HTMLDivElement, searchInput: HTMLInputElement, infoEl: HTMLElement, files: TFile[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void, expandedSet?: Set<string>) {
