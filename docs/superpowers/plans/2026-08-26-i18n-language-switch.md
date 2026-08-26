@@ -1157,18 +1157,18 @@ import { setLanguage } from "../src/i18n/index";
 describe("提示词模板双语", () => {
 	it("zh 模式生成中文提示词（与旧版一致）", () => {
 		setLanguage("zh");
-		const p = buildGeneratePrompt("材料", { single: 1, multi: 0, judge: 0, blank: 0, essay: 0 }, []);
+		const p = buildGeneratePrompt("材料", "single:1", []);
 		expect(p).toContain("出题助手");
 	});
 	it("en 模式生成英文提示词且含语言规则", () => {
 		setLanguage("en");
-		const p = buildGeneratePrompt("material", { single: 1, multi: 0, judge: 0, blank: 0, essay: 0 }, []);
+		const p = buildGeneratePrompt("material", "single:1", []);
 		expect(p).toContain("same language as the source material");
 	});
 });
 ```
 
-（签名以实际 `buildGeneratePrompt` 为准——先在 `src/services/questionService.ts` 确认签名再写测试）
+（`buildGeneratePrompt` 签名：`(sourceText: string, typeStr: string, existingTags: string[])`，typeStr 形如 `"single:5,multi:3"`，见 `src/services/questionService.ts:88`）
 
 - [ ] **Step 7: 验证 + 提交**
 
@@ -1320,14 +1320,14 @@ describe("parseExamBlocks 英文标签", () => {
 		const text = "**1.** Question\nA. x\nB. y\n**Answer:**\nB\n**Explanation:**\nBecause.";
 		const blocks = parseExamBlocks(text);
 		expect(blocks.length).toBeGreaterThan(0);
-		const labels = blocks.map(b => b.type);
-		expect(labels).toContain("answer");
-		expect(labels).toContain("explain");
+		const types = blocks.map(b => b.type);
+		expect(types).toContain("answer");
+		expect(types).toContain("explanation");
 	});
 });
 ```
 
-（`parseExamBlocks` 的实际 block type 值先查 `src/utils/exporter.ts` 再写断言）
+（`parseExamBlocks` 的 block type 取值为 `"answer"`/`"explanation"`，见 `src/utils/exporter.ts:23-31`）
 
 - [ ] **Step 2: 实现（只增不减）**
 
