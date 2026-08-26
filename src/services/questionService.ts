@@ -1,4 +1,5 @@
 import { cleanSourceText } from "../utils/text";
+import { getLanguage } from "../i18n/index";
 
 export const QUESTION_FORMAT_RULES = `【输出格式要求 - 必须严格遵守】
 必须用 ## 题型名称 作为大类标题，标题下逐题编号。仅输出本次要求出现的题型，其余题型一律不出现。
@@ -27,8 +28,82 @@ export const QUESTION_FORMAT_RULES = `【输出格式要求 - 必须严格遵守
 13. 全文使用书面、正式语体，剔除口语化表述，答案与解析采用教材式书面风格
 14. 在所有题目输出完毕后，最后一行必须输出：知识点：tag1, tag2, tag3（3-8个，逗号分隔）`;
 
+const QUESTION_FORMAT_RULES_EN = `[Output format requirements - must strictly follow]
+Use "## Question Type Name" as the section heading, with questions numbered consecutively under it. Only output the question types requested this time; no other types may appear.
+
+[Common format rules for all question types]
+- Single choice / Multiple choice: stem + A. B. C. D. four options; answer in letters. Single: A, Multiple: AB (write all correct letters)
+- True/False: options A. True B. False, answer A or B, one line
+- Fill in the blank: mark the blank with ( ) or ____ in the stem; answer: fill in the specific content, one line
+- Short answer / Essay / Term explanation / Calculation / Case analysis: multi-point answers; the line "Answer:" stands alone, followed by (1)(2)(3), one point per line, with clear scoring points; do not use "Step 1/Step 2" style wording
+- If the source contains explanations, keep them; otherwise add a brief explanation yourself
+- If the explanation is long, split it into (1) (2) (3) lines (one point per line); never use 2. 3. 4. style Arabic numerals, to avoid clashing with question numbers
+
+[Iron rules - absolutely forbidden]
+1. Never use any Markdown decoration symbols (#, *, backticks, etc.). The only exceptions are structural markers that MUST be used: bold question numbers as "**1.**", inner group headings as "#### Group Heading", and supplementary notes as blockquotes "> Note: xxx"
+2. Question number format is fixed: "**number.** stem text" (bold)
+3. Option format is fixed: "A. option text"
+4. Answer line format is fixed: "Answer: xxx" (short answers on one line: Answer: A, Answer: AB, Answer: Python agent; multi-point answers: "Answer:" alone on one line, then (1)(2)(3) one point per line)
+5. Explanation line format is fixed: "Explanation: xxx"; split points use (1)(2)(3), never 2. 3. 4. Arabic numerals
+6. Leave two blank lines between questions
+7. Do not output an answer summary at the end
+8. Short-answer points must use parenthesized numbers (1) (2) (3), one per line; never use 1. 2. 3. which clash with question numbers
+9. Multiple points ((1) xxx (2) xxx (3) xxx) must each be on its own line; each question's points restart from (1)
+10. Question numbers must match the section strictly: consecutive within each type heading (1. 2. 3. ...), never skip (1. 3. 5.) or mix numbers across types
+11. Each question must be a separate question with its own number; never merge two questions under one number
+12. Every point must be followed by real content; never output empty placeholders like (1)() or (1)（ ）
+13. Use formal, textbook-style written language throughout; answers and explanations must be scholarly
+14. After all questions, the LAST line must be: Knowledge: tag1, tag2, tag3 (3-8 tags, comma-separated)
+
+[Output language rule]
+Use the same language as the source material (Chinese material → Chinese questions with Chinese labels such as 答案/解析/题型名; English material → English questions with English labels such as Answer/Explanation/question type names).`;
+
 export function buildExamExtractPrompt(content: string, chunkIndex?: number, totalChunks?: number): string {
-	const chunkHint = (chunkIndex && totalChunks && totalChunks > 1) ? "\n【重要】这是第" + chunkIndex + "/" + totalChunks + "段内容，请提取本段中所有题目，不要遗漏。" : "";
+	const isEn = getLanguage() === "en";
+	const chunkHint = (chunkIndex && totalChunks && totalChunks > 1) ? (isEn ? "\n[Important] This is chunk " + chunkIndex + "/" + totalChunks + ". Extract ALL questions in this chunk; do not miss any." : "\n【重要】这是第" + chunkIndex + "/" + totalChunks + "段内容，请提取本段中所有题目，不要遗漏。") : "";
+	if (isEn) {
+		return `You are a professional exam extraction assistant. Read the following document carefully and accurately extract ALL exam questions from it. Extract every question; do not miss any.
+
+[Core principles - must follow]
+1. Respect the source: identify each question type exactly as it appears in the exam; do not change, add, or remove question types; extract exactly what the exam contains, never limit by count, and never duplicate or rewrite questions to pad the count
+2. Answer priority: if the exam provides answers, keep them exactly as-is; if not, generate a proper reference answer based on the question content
+3. Completeness: keep the full stem, options, and score info; do not trim
+4. If the document has score annotations (e.g. "2 points each"), keep them
+5. Full extraction: extract every question that appears; do not extract only part${chunkHint}
+
+[Output format example]
+Output in the following format or the system cannot parse it:
+
+## Question Type Name (e.g. Single Choice / Multiple Choice / True-False / Fill in the Blank / Short Answer / Essay / Calculation / Term Explanation / Case Analysis)
+**1.** Stem text
+A. Option A text
+B. Option B text
+C. Option C text
+D. Option D text
+
+Answer: A
+Explanation: one-sentence overview
+(1) Explanation point 1
+(2) Explanation point 2
+
+**2.** Next question stem text
+...
+
+${QUESTION_FORMAT_RULES_EN}
+
+[Length requirements for answers and explanations - only for answers you generate; keep exam-provided answers as-is]
+- Subjective questions (short answer/essay/term explanation/calculation/case analysis): 3-5 scoring points, each one sentence (~20-40 characters/words), each on its own line; total answer ~80-200 characters/words
+- Each explanation one sentence (~15-30 characters/words), no more lines than scoring points
+
+[Important notes]
+- If the document contains multiple exams, extract all of them
+- If the document is not in exam format (e.g. notes, textbooks), distill likely exam points and write questions from them
+- Keep questions complete and accurate
+- The type heading must accurately reflect the source type (e.g. if the source says "Essay", write "Essay")
+
+### Document content:
+${content}`;
+	}
 	return `你是专业的试卷识别助手。请仔细阅读以下文档内容，精准识别并提取其中所有的考试题目。必须提取所有题目，不要遗漏任何一道题。
 
 【核心原则 - 必须遵守】
@@ -86,16 +161,49 @@ export function parseTypeSpec(typeStr: string): { type: string; count: number }[
 }
 
 export function buildGeneratePrompt(sourceText: string, typeStr: string, existingTags: string[]): string {
+	const isEn = getLanguage() === "en";
 	const cleanSource = cleanSourceText(sourceText);
-	const existingTagsHint = existingTags.length > 0 ? "\n【已有的知识点标签（请优先使用这些标签）】\n" + existingTags.join("、") + "\n" : "";
+	const existingTagsHint = existingTags.length > 0
+		? (isEn ? "\n[Existing knowledge tags (prefer these if applicable)]\n" + existingTags.join(", ") + "\n" : "\n【已有的知识点标签（请优先使用这些标签）】\n" + existingTags.join("、") + "\n")
+		: "";
 	const spec = parseTypeSpec(typeStr);
 	let typeRules = "";
 	if (spec.length > 0) {
-		typeRules = "\n\n【出题规格 - 必须精确保留，缺失即扣分】\n只允许出下面列出的题型与数量，未列出的题型一律禁止出现：\n";
+		typeRules = isEn
+			? "\n\n[Question spec - must be preserved exactly, missing means failure]\nOnly output the following question types and counts; any unlisted type is forbidden:\n"
+			: "\n\n【出题规格 - 必须精确保留，缺失即扣分】\n只允许出下面列出的题型与数量，未列出的题型一律禁止出现：\n";
 		for (const { type, count } of spec) {
-			typeRules += "- " + type + "：" + count + " 道\n";
+			typeRules += isEn ? "- " + type + ": " + count + "\n" : "- " + type + "：" + count + " 道\n";
 		}
-		typeRules += "上述每种题型的题数必须不多不少、精确一致，少出或多出都算任务失败。";
+		typeRules += isEn ? "The count of each type must be exactly as specified; over- or under-producing counts as failure." : "上述每种题型的题数必须不多不少、精确一致，少出或多出都算任务失败。";
+	}
+	if (isEn) {
+		const promptBody = `You are a professional question-writing teacher. Write questions strictly based on the source content; do not invent knowledge points that do not exist.
+
+${QUESTION_FORMAT_RULES_EN}
+
+[Length requirements for answers and explanations - hard limits; exceeding or falling short is unqualified]
+- Objective questions (single/multi/true-false/fill-in-the-blank): one sentence is enough for the answer
+- Subjective questions (short answer/essay/term explanation/calculation/case analysis):
+  - The answer must have exactly 3-5 scoring points, each one sentence (~20-40 characters/words) on its own line; no empty placeholders
+  - The whole answer totals ~80-200 characters/words (excluding "Answer:" and numbers), complete logic and points
+  - Length check: over 200 → compress points; under 80 → complete points; a point over 40 → split or trim
+- Explanations map one-to-one to scoring points; each one sentence (~15-30 characters/words) stating the basis or reasoning, no more than the number of points
+- Answers of the same question type in one exam should have consistent length
+
+[Exact type and count]
+Strictly follow the [Question spec] below for the types and counts to produce this time (and only these).
+${typeRules || "\n\n(No explicit type/count spec provided; write about 5 questions of different types around the core content of the source. Do not invent knowledge points.)"}
+${existingTagsHint}
+### Reference source:
+${cleanSource}
+
+Question count: ${typeStr}
+Rule: skip content with no matching knowledge point; do not fabricate.
+[Knowledge extraction]
+After all questions, the LAST line must output:
+Knowledge: prefer matching existing knowledge tags, or add new ones (3-8 tags, comma-separated)`;
+		return promptBody;
 	}
 	const promptBody = `你是专业出题教师，严格依据原文内容出题，禁止编造不存在知识点。
 
@@ -127,8 +235,8 @@ ${cleanSource}
 
 const EXAM_NUM_LINE = /^(?:\*\*)?\d+(?:\*\*)?[.、）)]\s*/;
 const EXAM_SECTION_HEADING = /^#{1,6}\s+(.+)/;
-const EXAM_KNOWLEDGE_LINE = /^知识点[：:]\s*.*/;
-const EXAM_EMPTY_ANSWER_LINE = /^(?:标准)?(?:答案|参考答案)[：:]\s*$/;
+const EXAM_KNOWLEDGE_LINE = /^(?:知识点|Knowledge)[：:]\s*.*/i;
+const EXAM_EMPTY_ANSWER_LINE = /^(?:标准)?(?:答案|参考答案|Answer)[：:]\s*$/i;
 
 function repairBrokenNumberLines(text: string): string {
 	return text
@@ -151,7 +259,7 @@ function splitExamBlocks(lines: string[]): string[][] {
 		}
 		if (!cur) continue;
 		cur.push(trimmed);
-		if (/^解析[：:]/.test(trimmed)) inAnswer = false;
+		if (/^(?:解析|Explanation)[：:]/.test(trimmed)) inAnswer = false;
 		else if (EXAM_EMPTY_ANSWER_LINE.test(trimmed)) inAnswer = true;
 	}
 	return blocks;
@@ -226,7 +334,7 @@ export function parseAITagsFromResult(text: string): { tags: string[]; cleanText
 	const lastLines = lines.slice(-5);
 	for (let i = lastLines.length - 1; i >= 0; i--) {
 		const line = lastLines[i]!.trim();
-		const match = line.match(/^知识点[：:]\s*(.+)/);
+		const match = line.match(/^(?:知识点|Knowledge)[：:]\s*(.+)/i);
 		if (match) {
 			const tags = match[1]!.split(/[,，]/).map(s => s.trim()).filter(Boolean);
 			const cleanLines = lines.slice(0, lines.length - lastLines.length + i);

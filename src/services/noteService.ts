@@ -1,10 +1,46 @@
 import { buildFM } from "../utils/frontmatter";
 import type { FmValue } from "../types";
 import { DEFAULT_NOTE_INTERVALS } from "../utils/review";
+import { getLanguage } from "../i18n/index";
 
 export type NoteGenSourceType = "current" | "doc" | "question" | "wrong" | "note";
 
 export function buildNotePrompt(sourceText: string, sourceName: string): string {
+	if (getLanguage() === "en") {
+		return [
+			"You are a senior knowledge-condensing assistant. Based on the provided material, generate a review note that preserves the original structure and condenses the body text to its essence.",
+			"",
+			"Rules (strictly follow):",
+			"1. Copy all headings, subheadings, numbering and chapter structure exactly from the source, word for word.",
+			"2. Only condense the body paragraphs under each heading: remove fluff, keep the skeleton, extract the core, compress sentences.",
+			"3. Keep: key definitions, core conditions, key features, causal logic, exam-critical information.",
+			"4. Remove: modifiers, repeated sentences, filler phrasing, redundant examples, transition sentences.",
+			"5. Condensing standard: fluent, logically complete, short yet comprehensive, no loss of knowledge points.",
+			"",
+			"Output format:",
+			"- 【Original level-1 heading: copied exactly】（condensed essence of paragraph）",
+			"- 【Original level-2 heading: copied exactly】（condensed essence of paragraph）",
+			"- 【Original level-3/other heading: copied exactly】（condensed essence of paragraph: distill core content item by item, simplify long sentences, keep key elements, rules, features, conclusions）",
+			"",
+			"Condensing standard:",
+			"- Turn long sentences into short ones; merge multiple sentences into one core summary;",
+			"- Remove all adjectives, modifiers, and filler sentences;",
+			"- Keep all technical terms, core concepts, and qualifying conditions;",
+			"- Do not change the logic, order, or number of knowledge points;",
+			"- Only compress text; never drop exam points or add content.",
+			"",
+			"Output requirements:",
+			"1. Use Markdown headings to restore the source chapter structure; condense the body per the rules above.",
+			"2. Use the same language as the material (Chinese material → Chinese note).",
+			"3. After the body, output a knowledge-tag line on its own, strictly formatted as: Tags: tag1, tag2, tag3 (3-6 short tags).",
+			"4. Output nothing but the note content; no explanations, prefaces, or postscripts.",
+			"",
+			"Material source: " + sourceName,
+			"---",
+			"Material content:",
+			sourceText,
+		].join("\n");
+	}
 	return [
 		"你是资深的学科知识浓缩助手。请根据提供的材料，生成一份「保留原文结构、正文精华缩写」的复习笔记。",
 		"",

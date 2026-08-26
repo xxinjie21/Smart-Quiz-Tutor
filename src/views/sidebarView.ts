@@ -26,7 +26,7 @@ import { chatLLM, type ChatLLMOptions } from "../services/llmService";
 import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, mergeExamChunks } from "../services/questionService";
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 import { buildNotePrompt, parseNoteResult, buildNoteFrontmatter, type NoteGenSourceType } from "../services/noteService";
-import { t, tf } from "../i18n/index";
+import { t, tf, getLanguage } from "../i18n/index";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
@@ -2148,8 +2148,10 @@ export class MainSidebarView extends ItemView {
 		let text = "";
 		if (isImageFile(file.name)) {
 			const b64 = await this.readFileAsBase64(file);
-			const prompt = buildExamExtractPrompt("（试卷图片已随请求提供，请识别图片中的全部内容并提取所有题目）");
-			new Notice("图片识别：请确认当前模型支持多模态（视觉）能力");
+			const prompt = getLanguage() === "en"
+				? buildExamExtractPrompt("(The exam image is provided with the request; identify all content in the image and extract all questions)")
+				: buildExamExtractPrompt("（试卷图片已随请求提供，请识别图片中的全部内容并提取所有题目）");
+			new Notice(t("图片识别：请确认当前模型支持多模态（视觉）能力"));
 			text = await this.callAIWithPrompt(prompt, [b64]);
 		} else if (file.extension === "md") {
 			text = await this.app.vault.read(file);
@@ -2547,8 +2549,11 @@ export class MainSidebarView extends ItemView {
 	async noteSourceToText(file: TFile): Promise<string> {
 		if (isImageFile(file.name)) {
 			const b64 = await this.readFileAsBase64(file);
-			new Notice("图片识别：请确认当前模型支持多模态（视觉）能力");
-			return await this.callAIWithPrompt("请识别并转录图片中的全部文字内容，保持原有结构与顺序，直接输出转录结果，不要任何多余说明。", [b64]);
+			new Notice(t("图片识别：请确认当前模型支持多模态（视觉）能力"));
+			const prompt = getLanguage() === "en"
+				? "Identify and transcribe all text in the image, preserving the original structure and order. Output only the transcription with no extra commentary."
+				: "请识别并转录图片中的全部文字内容，保持原有结构与顺序，直接输出转录结果，不要任何多余说明。";
+			return await this.callAIWithPrompt(prompt, [b64]);
 		}
 		if (file.extension === "md") {
 			const text = isAbs(file.path) ? readFileStr(file.path) : await this.app.vault.read(file);
@@ -3230,8 +3235,11 @@ export class MainSidebarView extends ItemView {
 			}
 		}
 		if (sources.length === 0) { new Notice("没有可用的源文件"); return; }
-		const weakPrompt = "【出题要求 - 请重点关注以下薄弱知识点】\n" + wp.map(w => "- " + w.tag + "（错题" + w.count + "次）").join("\n") + "\n\n对于上述薄弱知识点，每类至少出2-3题。\n\n";
-		this.startGenerate(weakPrompt + sources.join("\n\n---\n\n"), "薄弱点定向生成", paths.join(","));
+		const isEn = getLanguage() === "en";
+		const weakPrompt = isEn
+			? "[Question requirements - focus on the following weak knowledge points]\n" + wp.map(w => "- " + w.tag + " (wrong " + w.count + " times)").join("\n") + "\n\nFor each weak point above, write at least 2-3 questions.\n\n"
+			: "【出题要求 - 请重点关注以下薄弱知识点】\n" + wp.map(w => "- " + w.tag + "（错题" + w.count + "次）").join("\n") + "\n\n对于上述薄弱知识点，每类至少出2-3题。\n\n";
+		this.startGenerate(weakPrompt + sources.join("\n\n---\n\n"), t("薄弱点定向生成"), paths.join(","));
 	}
 
 	// ===================== ANSWER (inline) =====================

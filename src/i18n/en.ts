@@ -392,4 +392,6 @@ export const en: Record<keyof typeof zh, string> = {
 	"将同时删除以下 {n} 个索引文件：": "{n} index files will also be deleted:",
 	"此操作不可恢复，是否继续？": "This cannot be undone. Continue?",
 	"取消": "Cancel",
+	// ---- Phase 2: AI prompt related UI ----
+	"图片识别：请确认当前模型支持多模态（视觉）能力": "Image recognition: make sure your model supports multimodal (vision) capability",
 };

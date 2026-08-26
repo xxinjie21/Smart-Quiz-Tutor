@@ -2,6 +2,7 @@ import { Notice, TFile, TFolder, type App } from "obsidian";
 import type { PluginSettings, WrongAnswerNote } from "../types";
 import { knowledgeTags } from "../utils/frontmatter";
 import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, joinPath } from "../utils/fs-utils";
+import { getLanguage } from "../i18n/index";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -287,6 +288,30 @@ function extractTagsFromFrontmatter(yaml: string): string[] {
 }
 
 export function buildTaggingPrompt(content: string, existingTags: string[]): string {
+	if (getLanguage() === "en") {
+		const existingHint = existingTags.length > 0 ? "\n[Existing knowledge tags (prefer these, new ones allowed)]\n" + existingTags.join(", ") + "\n" : "";
+		return `You are a professional knowledge-management assistant. Extract core knowledge-point tags from the following document.
+
+[Task]
+Analyze the document content and extract 3-8 knowledge-point tags that best summarize its core topics.
+
+[Tag rules]
+1. Tags must be specific knowledge-point names, not generic ones
+   ✓ Binomial theorem, Photosynthesis, TCP three-way handshake, French Revolution, Newton's second law
+   ✗ Math, Biology, Computer, History, Physics (too generic to locate specific knowledge)
+2. Tags must come from the actual document content; do not invent them
+3. Prefer existing tags (see list below), but new document-specific tags are allowed
+4. Each tag 2-8 words, no more than 10 words
+5. Forbidden generic words: "question", "note", "wrong answer", "exam", "test paper", "single choice", "short answer", etc.
+6. Exam/question sets → tags should reflect the knowledge domain tested (e.g. "probability" not "single choice")
+7. Notes/textbooks → tags should reflect core topics and key concepts
+
+[Output format]
+One tag per line, no numbering, no explanation, nothing else.${existingHint}
+
+### Document content:
+${content.slice(0, 12000)}`;
+	}
 	const existingHint = existingTags.length > 0 ? "\n【已有知识点标签（请优先使用这些标签，也可以新增）】\n" + existingTags.join("、") + "\n" : "";
 	return `你是专业的知识管理助手。请从以下文档中提取核心知识点标签。
 
