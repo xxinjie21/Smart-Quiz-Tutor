@@ -517,7 +517,7 @@ export class MainSidebarView extends ItemView {
 		el.empty();
 
 		const folder = this.plugin.rootPath(this.plugin.settings.questionFolder);
-		if (!folder) { el.createDiv({ text: "请在设置中配置题目文件夹", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } }); return; }
+		if (!folder) { el.createDiv({ text: t("请在设置中配置题目文件夹"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } }); return; }
 
 		const files = await this.listQuestionFiles(folder);
 
@@ -540,15 +540,15 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const statsRow = el.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:10px;font-size:18px;" } });
-		statsRow.createSpan({ text: "题目 " + files.length, attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--interactive-accent) 15%, transparent);color:var(--interactive-accent);font-weight:600;" } });
-		statsRow.createSpan({ text: "知识点 " + allTags.size, attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);font-weight:600;" } });
+		statsRow.createSpan({ text: tf("{label} {n}", { label: t("题目"), n: files.length }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--interactive-accent) 15%, transparent);color:var(--interactive-accent);font-weight:600;" } });
+		statsRow.createSpan({ text: tf("{label} {n}", { label: t("知识点"), n: allTags.size }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);font-weight:600;" } });
 
 		const sortBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 		const sortModes: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
-			{ key: "default", label: "默认" },
-			{ key: "source", label: "按源文件" },
-			{ key: "tag", label: "按知识点" },
-			{ key: "time", label: "按时间" },
+			{ key: "default", label: t("默认") },
+			{ key: "source", label: t("按源文件") },
+			{ key: "tag", label: t("按知识点") },
+			{ key: "time", label: t("按时间") },
 		];
 		for (const m of sortModes) {
 			const mb = sortBar.createEl("button", { text: m.label, attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.questionsSortMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -556,17 +556,17 @@ export class MainSidebarView extends ItemView {
 		}
 
 		if (files.length === 0) {
-			el.createDiv({ text: "暂无题目文件", attr: { style: "color:var(--text-faint);text-align:center;padding:20px 0;font-size:19px;" } });
+			el.createDiv({ text: t("暂无题目文件"), attr: { style: "color:var(--text-faint);text-align:center;padding:20px 0;font-size:19px;" } });
 			return;
 		}
 
-		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
+		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
 		this.adminBatchUpdate = this.renderAdminBatchBar(el, fileData.map(fd => fd.file.path), () => {
 			const selected = fileData.filter(fd => this.adminSelected.has(fd.file.path)).map(fd => fd.file.path);
 			void this.adminDeleteFiles(selected, folder, () => void this.renderQuestionsTab());
 		}, () => {
 			const selected = fileData.filter(fd => this.adminSelected.has(fd.file.path)).map(fd => fd.file.path);
-			void this.adminExportFiles(selected, folder, "题目批量导出");
+			void this.adminExportFiles(selected, folder, t("题目批量导出"));
 		});
 		const listEl = el.createDiv({});
 
@@ -594,21 +594,21 @@ export class MainSidebarView extends ItemView {
 					const b = actRow.createSpan({ text: label, attr: { title: tip, style: "padding:1px 4px;border-radius:3px;cursor:pointer;font-size:16px;" } });
 					b.addEventListener("click", (e) => { e.stopPropagation(); cb(); });
 				};
-				actBtn("📖", "打开", () => { void this.app.workspace.openLinkText(file.path, "", false).catch(() => {}); });
-				actBtn("✏️", "答题", () => {
+				actBtn("📖", t("打开"), () => { void this.app.workspace.openLinkText(file.path, "", false).catch(() => {}); });
+				actBtn("✏️", t("答题"), () => {
 					void (async () => {
 						const content = isAbs(folder) ? readFileStr(file.path) : await this.app.vault.read(file);
 						const clean = content.replace(/^---[\s\S]*?---\s*/, "");
 						this.startAnswer(clean, file.basename, file.path);
 					})();
 				});
-				actBtn("📒", "生成笔记", () => {
+				actBtn("📒", t("生成笔记"), () => {
 					void (async () => {
 						const content = isAbs(folder) ? readFileStr(file.path) : await this.app.vault.read(file);
 						await this.noteGenStartDirect(file.basename, content.replace(/^---[\s\S]*?---\s*/, ""), file.path);
 					})();
 				});
-				actBtn("📤", "导出", () => {
+				actBtn("📤", t("导出"), () => {
 					void (async () => {
 						const content = isAbs(folder) ? readFileStr(file.path) : await this.app.vault.read(file);
 						const clean = content.replace(/^---[\s\S]*?---\s*/, "");
@@ -617,23 +617,23 @@ export class MainSidebarView extends ItemView {
 						if (r.canceled || !r.filePath) return;
 						const fp = r.filePath;
 						if (fp.endsWith(".docx")) {
-							const children = buildWordParagraphs(clean, baseName + " 配套试题", baseName);
+							const children = buildWordParagraphs(clean, baseName + t(" 配套试题"), baseName);
 							const doc = new Document({ sections: [{ properties: {}, children }] });
 							const buffer = await Packer.toBuffer(doc);
 							fs.writeFileSync(fp, Buffer.from(buffer));
-							new Notice("Word已保存");
+							new Notice(t("Word已保存"));
 						} else if (fp.endsWith(".pdf")) {
-							await exportPdfDirect(fp, clean, baseName + " 配套试题", baseName);
-							new Notice("PDF已保存");
+							await exportPdfDirect(fp, clean, baseName + t(" 配套试题"), baseName);
+							new Notice(t("PDF已保存"));
 						} else {
 							fs.writeFileSync(fp, clean, "utf-8");
-							new Notice("Md已保存");
+							new Notice(t("Md已保存"));
 						}
 					})();
 				});
-				actBtn("✏", "重命名", () => {
+				actBtn("✏", t("重命名"), () => {
 					void (async () => {
-						const newName = prompt("输入新文件名（不含扩展号）：", file.basename);
+						const newName = prompt(t("输入新文件名（不含扩展号）："), file.basename);
 						if (!newName || newName === file.basename) return;
 						try {
 							if (isAbs(folder)) {
@@ -643,19 +643,19 @@ export class MainSidebarView extends ItemView {
 								const newPath = file.path.replace(/[^/]+$/, newName + ".md");
 								await this.app.vault.rename(file, newPath);
 							}
-							new Notice("已重命名");
+							new Notice(t("已重命名"));
 							void this.renderQuestionsTab();
-						} catch (err) { new Notice("重命名失败：" + (err as Error).message); }
+						} catch (err) { new Notice(tf("重命名失败：{msg}", { msg: (err as Error).message })); }
 					})();
 				});
-				actBtn("🗑", "删除", () => {
+				actBtn("🗑", t("删除"), () => {
 					void (async () => {
-						if (!confirm("确定删除题目文件「" + file.basename + "」？")) return;
+						if (!confirm(tf("确定删除题目文件「{name}」？", { name: file.basename }))) return;
 						try {
 							if (isAbs(folder)) { fs.unlinkSync(file.path); } else { await this.app.fileManager.trashFile(file); }
-							new Notice("已删除");
+							new Notice(t("已删除"));
 							void this.renderQuestionsTab();
-						} catch (err) { new Notice("删除失败：" + (err as Error).message); }
+						} catch (err) { new Notice(tf("删除失败：{msg}", { msg: (err as Error).message })); }
 					})();
 				});
 			};
@@ -677,14 +677,14 @@ export class MainSidebarView extends ItemView {
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: src, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });
-					header.createSpan({ text: srcFiles.length + "题", attr: { style: "font-size:17px;color:var(--text-muted);" } });
+					header.createSpan({ text: tf("{n}题", { n: srcFiles.length }), attr: { style: "font-size:17px;color:var(--text-muted);" } });
 					const list = group.createDiv({ attr: { style: "display:none;padding:4px 8px;" } });
 					for (const fd of srcFiles) renderFileItem(list, fd);
 					let expanded = false;
 					header.addEventListener("click", () => { expanded = !expanded; list.style.display = expanded ? "block" : "none"; arrow.setText(expanded ? "▾" : "▸"); });
 				}
 				if (noSource.length > 0) {
-					listEl.createDiv({ text: "未分类", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
+					listEl.createDiv({ text: t("未分类"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
 					for (const fd of noSource) renderFileItem(listEl, fd);
 				}
 			} else if (this.questionsSortMode === "tag") {
@@ -704,14 +704,14 @@ export class MainSidebarView extends ItemView {
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: "#" + tag, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });
-					header.createSpan({ text: tagFiles.length + "题", attr: { style: "font-size:17px;color:var(--text-muted);" } });
+					header.createSpan({ text: tf("{n}题", { n: tagFiles.length }), attr: { style: "font-size:17px;color:var(--text-muted);" } });
 					const list = group.createDiv({ attr: { style: "display:none;padding:4px 8px;" } });
 					for (const fd of tagFiles) renderFileItem(list, fd);
 					let expanded = false;
 					header.addEventListener("click", () => { expanded = !expanded; list.style.display = expanded ? "block" : "none"; arrow.setText(expanded ? "▾" : "▸"); });
 				}
 				if (untagged.length > 0) {
-					listEl.createDiv({ text: "未分类", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
+					listEl.createDiv({ text: t("未分类"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
 					for (const fd of untagged) renderFileItem(listEl, fd);
 				}
 			} else if (this.questionsSortMode === "time") {
@@ -735,7 +735,7 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const folder = this.plugin.rootPath(this.plugin.settings.noteViewFolder);
-		if (!folder) { el.createDiv({ text: "请在设置中配置笔记文件夹", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } }); return; }
+		if (!folder) { el.createDiv({ text: t("请在设置中配置笔记文件夹"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } }); return; }
 
 		const files = await this.listNoteViewFiles(folder);
 
@@ -761,19 +761,19 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const statsRow = el.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:10px;font-size:18px;" } });
-		statsRow.createSpan({ text: "笔记 " + files.length, attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);font-weight:600;" } });
-		statsRow.createSpan({ text: "知识点 " + allTags.size, attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--interactive-accent) 15%, transparent);color:var(--interactive-accent);font-weight:600;" } });
+		statsRow.createSpan({ text: tf("{label} {n}", { label: t("笔记"), n: files.length }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);font-weight:600;" } });
+		statsRow.createSpan({ text: tf("{label} {n}", { label: t("知识点"), n: allTags.size }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--interactive-accent) 15%, transparent);color:var(--interactive-accent);font-weight:600;" } });
 
 		const actionRow = el.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:10px;" } });
-		const createBtn = actionRow.createEl("button", { text: "从文件创建笔记", attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+		const createBtn = actionRow.createEl("button", { text: t("从文件创建笔记"), attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 		createBtn.addEventListener("click", () => { this.notePickerActive = true; void this.renderNotesTab(); });
 
 		const sortBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 		const sortModes: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
-			{ key: "default", label: "默认" },
-			{ key: "source", label: "按源文件" },
-			{ key: "tag", label: "按知识点" },
-			{ key: "time", label: "按时间" },
+			{ key: "default", label: t("默认") },
+			{ key: "source", label: t("按源文件") },
+			{ key: "tag", label: t("按知识点") },
+			{ key: "time", label: t("按时间") },
 		];
 		for (const m of sortModes) {
 			const mb = sortBar.createEl("button", { text: m.label, attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.notesSortMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -781,17 +781,17 @@ export class MainSidebarView extends ItemView {
 		}
 
 		if (files.length === 0) {
-			el.createDiv({ text: "暂无笔记文件", attr: { style: "color:var(--text-faint);text-align:center;padding:20px 0;font-size:19px;" } });
+			el.createDiv({ text: t("暂无笔记文件"), attr: { style: "color:var(--text-faint);text-align:center;padding:20px 0;font-size:19px;" } });
 			return;
 		}
 
-		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
+		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
 		this.adminBatchUpdate = this.renderAdminBatchBar(el, fileData.map(fd => fd.file.path), () => {
 			const selected = fileData.filter(fd => this.adminSelected.has(fd.file.path)).map(fd => fd.file.path);
 			void this.adminDeleteFiles(selected, folder, () => void this.renderNotesTab());
 		}, () => {
 			const selected = fileData.filter(fd => this.adminSelected.has(fd.file.path)).map(fd => fd.file.path);
-			void this.adminExportFiles(selected, folder, "笔记批量导出");
+			void this.adminExportFiles(selected, folder, t("笔记批量导出"));
 		});
 		const listEl = el.createDiv({});
 
@@ -818,21 +818,21 @@ export class MainSidebarView extends ItemView {
 					const b = actRow.createSpan({ text: label, attr: { title: tip, style: "padding:1px 4px;border-radius:3px;cursor:pointer;font-size:16px;" } });
 					b.addEventListener("click", (e) => { e.stopPropagation(); cb(); });
 				};
-				actBtn("📖", "打开", () => { void this.app.workspace.openLinkText(file.path, "", false).catch(() => {}); });
-				actBtn("📒", "生成笔记", () => {
+				actBtn("📖", t("打开"), () => { void this.app.workspace.openLinkText(file.path, "", false).catch(() => {}); });
+				actBtn("📒", t("生成笔记"), () => {
 					void (async () => {
 						const content = isAbs(folder) ? readFileStr(file.path) : await this.app.vault.read(file);
 						await this.noteGenStartDirect(file.basename, content.replace(/^---[\s\S]*?---\s*/, ""), file.path);
 					})();
 				});
-				actBtn("🗑", "删除", () => {
+				actBtn("🗑", t("删除"), () => {
 					void (async () => {
-						if (!confirm("确定删除笔记「" + file.basename + "」？")) return;
+						if (!confirm(tf("确定删除笔记「{name}」？", { name: file.basename }))) return;
 						try {
 							if (isAbs(folder)) { fs.unlinkSync(file.path); } else { await this.app.fileManager.trashFile(file); }
-							new Notice("已删除");
+							new Notice(t("已删除"));
 							void this.renderNotesTab();
-						} catch (err) { new Notice("删除失败：" + (err as Error).message); }
+						} catch (err) { new Notice(tf("删除失败：{msg}", { msg: (err as Error).message })); }
 					})();
 				});
 			};
@@ -854,14 +854,14 @@ export class MainSidebarView extends ItemView {
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: src, attr: { style: "font-weight:600;font-size:18px;color:var(--color-green);flex:1;" } });
-					header.createSpan({ text: srcFiles.length + "篇", attr: { style: "font-size:17px;color:var(--text-muted);" } });
+					header.createSpan({ text: tf("{n}篇", { n: srcFiles.length }), attr: { style: "font-size:17px;color:var(--text-muted);" } });
 					const list = group.createDiv({ attr: { style: "display:none;padding:4px 8px;" } });
 					for (const fd of srcFiles) renderFileItem(list, fd);
 					let expanded = false;
 					header.addEventListener("click", () => { expanded = !expanded; list.style.display = expanded ? "block" : "none"; arrow.setText(expanded ? "▾" : "▸"); });
 				}
 				if (noSource.length > 0) {
-					listEl.createDiv({ text: "未分类", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
+					listEl.createDiv({ text: t("未分类"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
 					for (const fd of noSource) renderFileItem(listEl, fd);
 				}
 			} else if (this.notesSortMode === "tag") {
@@ -881,14 +881,14 @@ export class MainSidebarView extends ItemView {
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: "#" + tag, attr: { style: "font-weight:600;font-size:18px;color:var(--color-green);flex:1;" } });
-					header.createSpan({ text: tagFiles.length + "篇", attr: { style: "font-size:17px;color:var(--text-muted);" } });
+					header.createSpan({ text: tf("{n}篇", { n: tagFiles.length }), attr: { style: "font-size:17px;color:var(--text-muted);" } });
 					const list = group.createDiv({ attr: { style: "display:none;padding:4px 8px;" } });
 					for (const fd of tagFiles) renderFileItem(list, fd);
 					let expanded = false;
 					header.addEventListener("click", () => { expanded = !expanded; list.style.display = expanded ? "block" : "none"; arrow.setText(expanded ? "▾" : "▸"); });
 				}
 				if (untagged.length > 0) {
-					listEl.createDiv({ text: "未分类", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
+					listEl.createDiv({ text: t("未分类"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:10px 0 6px;" } });
 					for (const fd of untagged) renderFileItem(listEl, fd);
 				}
 			} else if (this.notesSortMode === "time") {
@@ -901,9 +901,9 @@ export class MainSidebarView extends ItemView {
 	}
 
 	renderNotePicker(el: HTMLDivElement) {
-		const backBtn = el.createEl("button", { text: "← 返回笔记列表", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回笔记列表"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.notePickerActive = false; void this.renderNotesTab(); });
-		el.createDiv({ text: "选择要加入笔记库的文件", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:8px;" } });
+		el.createDiv({ text: t("选择要加入笔记库的文件"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:8px;" } });
 
 		const excludeList = this.buildExcludeList();
 		this.fpAllFiles = this.app.vault.getFiles().filter(f => {
@@ -916,30 +916,30 @@ export class MainSidebarView extends ItemView {
 		});
 
 		const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:8px;" } });
-		infoEl.setText("共 " + this.fpAllFiles.length + " 个文档，已选 " + this.fpSelected.size + " 个");
+		infoEl.setText(tf("共 {a} 个文档，已选 {b} 个", { a: this.fpAllFiles.length, b: this.fpSelected.size }));
 
 		const searchDiv = el.createDiv({ attr: { style: "margin-bottom:8px;" } });
-		const searchInput = searchDiv.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
+		const searchInput = searchDiv.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
 
 		const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
 		const toolBtn = (label: string, cb: () => void) => {
 			const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			b.addEventListener("click", cb);
 		};
-		toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
-		toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
+		toolBtn(t("全选"), () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+		toolBtn(t("取消全选"), () => { this.fpSelected.clear(); rerender(); });
 
 		const listEl = el.createDiv({ attr: { style: "max-height:450px;overflow-y:auto;" } });
 		const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-		const confirmBtn = btnRow.createEl("button", { text: "创建笔记 (0个)", attr: { class: "mod-cta", style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:19px;" } });
-		const updateConfirm = () => { confirmBtn.setText("创建笔记 (" + this.fpSelected.size + "个)"); };
+		const confirmBtn = btnRow.createEl("button", { text: tf("创建笔记 ({n}个)", { n: 0 }), attr: { class: "mod-cta", style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:19px;" } });
+		const updateConfirm = () => { confirmBtn.setText(tf("创建笔记 ({n}个)", { n: this.fpSelected.size })); };
 		const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm, this.notePickerExpanded); updateConfirm(); };
 		searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
 		rerender();
 		confirmBtn.addEventListener("click", () => {
 			void (async () => {
 				const chosen = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
-				if (chosen.length === 0) { new Notice("请至少选择一个文件"); return; }
+				if (chosen.length === 0) { new Notice(t("请至少选择一个文件")); return; }
 				const noteFolder = this.plugin.rootPath(this.plugin.settings.noteViewFolder);
 				await ensureFolder(this.app, noteFolder);
 				const useFs = isAbs(noteFolder);
@@ -959,7 +959,7 @@ export class MainSidebarView extends ItemView {
 						catch { try { await this.app.vault.create(noteFolder + "/" + safeName(f.basename) + "_笔记_" + Date.now() + ".md", fm + content); count++; } catch { /* skip */ } }
 					}
 				}
-				new Notice("已创建 " + count + " 个笔记");
+				new Notice(tf("已创建 {n} 个笔记", { n: count }));
 				this.notePickerActive = false;
 				this.fpSelected.clear();
 				void this.renderNotesTab();
