@@ -1849,8 +1849,8 @@ export class MainSidebarView extends ItemView {
 		if (this.examProcessing) {
 			const statusEl = el.createDiv({ attr: { style: "text-align:center;padding:24px 0;" } });
 			statusEl.createDiv({ text: "⏳", attr: { style: "font-size:28px;margin-bottom:8px;" } });
-			statusEl.createDiv({ text: this.examStatusText || "AI 正在识别题目...", attr: { style: "color:var(--text-muted);font-size:19px;" } });
-			const stopBtn = statusEl.createEl("button", { text: "⏹ 停止", attr: { style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);margin-top:12px;" } });
+			statusEl.createDiv({ text: this.examStatusText || t("AI 正在识别题目..."), attr: { style: "color:var(--text-muted);font-size:19px;" } });
+			const stopBtn = statusEl.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);margin-top:12px;" } });
 			stopBtn.addEventListener("click", () => this.cancelAI());
 			return;
 		}
@@ -1859,8 +1859,8 @@ export class MainSidebarView extends ItemView {
 
 		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
 		const modes: { key: "current" | "folder"; label: string }[] = [
-			{ key: "current", label: "当前文件" },
-			{ key: "folder", label: "从文件夹选择" },
+			{ key: "current", label: t("当前文件") },
+			{ key: "folder", label: t("从文件夹选择") },
 		];
 		for (const m of modes) {
 			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.examMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -1871,20 +1871,20 @@ export class MainSidebarView extends ItemView {
 			const activeFile = this.app.workspace.getActiveFile();
 			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-				el.createDiv({ text: "请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+				el.createDiv({ text: t("请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
 			} else {
 				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
-				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: t("当前文件：") });
 				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);" } });
 				info.createDiv({ text: this.fileSizeInfo(activeFile), attr: { style: "color:var(--text-muted);margin-top:2px;" } });
-				const processBtn = el.createEl("button", { text: "📄 识别当前文件", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
+				const processBtn = el.createEl("button", { text: t("📄 识别当前文件"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
 				processBtn.addEventListener("click", () => { void this.openCurrentFileExtract(); });
 			}
 		} else {
 			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
 			infoEl.setText(this.selectInfoText(this.examFiles, this.examSelected));
 
-			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
+			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
 			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
 			const toolBtn = (label: string, cb: () => void) => {
@@ -1894,22 +1894,22 @@ export class MainSidebarView extends ItemView {
 
 			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
 			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-			const procBtn = btnRow.createEl("button", { text: "🔍 AI 识别题目（0个）", attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+			const procBtn = btnRow.createEl("button", { text: tf("🔍 AI 识别题目（{n}个）", { n: 0 }), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
 			procBtn.addEventListener("click", () => {
-				if (this.examSelected.size === 0) { new Notice("请至少选择一个文件"); return; }
+				if (this.examSelected.size === 0) { new Notice(t("请至少选择一个文件")); return; }
 				void this.extractFromExamSelected();
 			});
-			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+			const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			clearBtn.addEventListener("click", () => { this.examSelected.clear(); rerender(); });
 			const updateConfirm = () => {
 				const size = this.examSelected.size;
-				procBtn.setText("🔍 AI 识别题目（" + size + "个）");
+				procBtn.setText(tf("🔍 AI 识别题目（{n}个）", { n: size }));
 				procBtn.style.opacity = size === 0 ? "0.5" : "1";
 				procBtn.style.pointerEvents = size === 0 ? "none" : "auto";
 			};
 			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.examFiles, this.examSelected, rerender, updateConfirm, this.examExpanded); updateConfirm(); };
-			toolBtn("全选", () => { this.examFiles.forEach(f => this.examSelected.add(f.path)); rerender(); });
-			toolBtn("取消全选", () => { this.examSelected.clear(); rerender(); });
+			toolBtn(t("全选"), () => { this.examFiles.forEach(f => this.examSelected.add(f.path)); rerender(); });
+			toolBtn(t("取消全选"), () => { this.examSelected.clear(); rerender(); });
 			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
 			rerender();
 		}
@@ -1965,7 +1965,7 @@ export class MainSidebarView extends ItemView {
 
 		this.examProcessing = true;
 		this.resetAI();
-		this.examStatusText = "准备识别 " + files.length + " 个文件...";
+		this.examStatusText = tf("准备识别 {n} 个文件...", { n: files.length });
 		void this.renderExamBrowser();
 
 		const cfg = this.plugin.settings;
@@ -1979,7 +1979,7 @@ export class MainSidebarView extends ItemView {
 			if (this.aiCancelled) break;
 			const file = files[i];
 			if (!file) continue;
-			this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + "...";
+			this.examStatusText = tf("正在识别 ({cur}/{total}) {name}...", { cur: i + 1, total: files.length, name: file.name });
 			void this.renderExamBrowser();
 
 			try {
@@ -1994,7 +1994,7 @@ export class MainSidebarView extends ItemView {
 					if (content.length <= MAX_EXAM_CHUNK_CHARS) {
 						chunks.push(content);
 					} else {
-						this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + "（内容较长，分" + Math.ceil(content.length / MAX_EXAM_CHUNK_CHARS) + "段识别）...";
+						this.examStatusText = tf("正在识别 ({cur}/{total}) {name}（内容较长，分{n}段识别）...", { cur: i + 1, total: files.length, name: file.name, n: Math.ceil(content.length / MAX_EXAM_CHUNK_CHARS) });
 						void this.renderExamBrowser();
 						const overlap = EXAM_CHUNK_OVERLAP;
 						for (let start = 0; start < content.length; start += MAX_EXAM_CHUNK_CHARS - overlap) {
@@ -2007,7 +2007,7 @@ export class MainSidebarView extends ItemView {
 					if (this.aiCancelled) break;
 					const chunk = chunks[ci]!;
 					if (chunks.length > 1) {
-						this.examStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.name + " - 第" + (ci + 1) + "/" + chunks.length + "段...";
+						this.examStatusText = tf("正在识别 ({cur}/{total}) {name} - 第{s}/{e}段...", { cur: i + 1, total: files.length, name: file.name, s: ci + 1, e: chunks.length });
 						void this.renderExamBrowser();
 					}
 					const prompt = buildExamExtractPrompt(chunk, ci + 1, chunks.length);
@@ -2046,7 +2046,7 @@ export class MainSidebarView extends ItemView {
 				if ((err as Error).name === "AbortError") {
 					if (this.aiCancelled) break;
 					this.examProcessing = false;
-					this.examStatusText = "识别超时（3分钟）";
+					this.examStatusText = t("识别超时（3分钟）");
 					void this.renderExamBrowser();
 					return;
 				}
@@ -2055,7 +2055,7 @@ export class MainSidebarView extends ItemView {
 
 		this.examProcessing = false;
 		if (this.aiCancelled) {
-			this.examStatusText = "已中止";
+			this.examStatusText = t("已中止");
 			void this.renderExamBrowser();
 			return;
 		}
@@ -2066,7 +2066,7 @@ export class MainSidebarView extends ItemView {
 		this.plugin.emitDataChanged();
 
 		if (savedPaths.length === 0) {
-			this.examStatusText = "所有文件均未能识别出题目";
+			this.examStatusText = t("所有文件均未能识别出题目");
 			void this.renderExamBrowser();
 			return;
 		}
@@ -2076,7 +2076,7 @@ export class MainSidebarView extends ItemView {
 			if (savedFile && savedFile instanceof TFile) {
 				const content2 = await this.app.vault.read(savedFile);
 				const clean2 = content2.replace(/^---[\s\S]*?---\s*/, "");
-				new Notice("识别完成，共 " + totalQuestions + " 题，已保存至 " + savedPaths[0]);
+				new Notice(tf("识别完成，共 {n} 题，已保存至 {path}", { n: totalQuestions, path: savedPaths[0] }));
 				this.startAnswer(clean2, savedFile.basename, savedFile.path);
 				return;
 			}
@@ -2092,8 +2092,8 @@ export class MainSidebarView extends ItemView {
 				paths.push(p);
 			}
 		}
-		new Notice("识别完成，共 " + totalQuestions + " 题，已保存 " + savedPaths.length + " 个文件");
-		this.startGenerate(normalizeExamContent(combined.trim()), savedPaths.length + "个识别试卷", paths.join(","));
+		new Notice(tf("识别完成，共 {n} 题，已保存 {m} 个文件", { n: totalQuestions, m: savedPaths.length }));
+		this.startGenerate(normalizeExamContent(combined.trim()), tf("{n}个识别试卷", { n: savedPaths.length }), paths.join(","));
 	}
 
 	cancelAI() {
@@ -2205,15 +2205,15 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => { this.cancelAI(); this.fpSelected.clear(); this.taggerStatusText = ""; this.homeView = "default"; void this.renderHomeTab(); });
-		el.createDiv({ text: "AI添加标签", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "AI识别文档中的知识点，自动写入frontmatter，用于Obsidian知识图谱", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
+		el.createDiv({ text: t("AI添加标签"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: t("AI识别文档中的知识点，自动写入frontmatter，用于Obsidian知识图谱"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
 
 		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
 		const modes: { key: "current" | "folder"; label: string }[] = [
-			{ key: "current", label: "当前文件" },
-			{ key: "folder", label: "从文件夹选择" },
+			{ key: "current", label: t("当前文件") },
+			{ key: "folder", label: t("从文件夹选择") },
 		];
 		for (const m of modes) {
 			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.taggerMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -2223,17 +2223,17 @@ export class MainSidebarView extends ItemView {
 		if (this.taggerMode === "current") {
 			const activeFile = this.app.workspace.getActiveFile();
 			if (!activeFile || activeFile.extension !== "md") {
-				el.createDiv({ text: "请先打开一个Markdown文件", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+				el.createDiv({ text: t("请先打开一个Markdown文件"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
 			} else {
 				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
-				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: t("当前文件：") });
 				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);" } });
 				info.createDiv({ text: this.fileSizeInfo(activeFile), attr: { style: "color:var(--text-muted);margin-top:2px;" } });
 				const btnRow = el.createDiv({ attr: { style: "display:flex;gap:8px;align-items:center;" } });
-				const processBtn = btnRow.createEl("button", { text: this.taggerProcessing ? "处理中..." : "🤖 开始识别标签", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" + (this.taggerProcessing ? "opacity:0.5;pointer-events:none;" : "") } });
+				const processBtn = btnRow.createEl("button", { text: this.taggerProcessing ? t("处理中...") : t("🤖 开始识别标签"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" + (this.taggerProcessing ? "opacity:0.5;pointer-events:none;" : "") } });
 				processBtn.addEventListener("click", () => { void this.runAITagging([activeFile]); });
 				if (this.taggerProcessing) {
-					const stopBtn = btnRow.createEl("button", { text: "⏹ 停止", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+					const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
 					stopBtn.addEventListener("click", () => this.cancelAI());
 				}
 			}
@@ -2242,7 +2242,7 @@ export class MainSidebarView extends ItemView {
 			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
 			infoEl.setText(this.selectInfoText(this.fpAllFiles, this.fpSelected));
 
-			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
+			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
 			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
 			const toolBtn = (label: string, cb: () => void) => {
@@ -2252,27 +2252,27 @@ export class MainSidebarView extends ItemView {
 
 			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
 			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-			const procBtn = btnRow.createEl("button", { text: (this.taggerProcessing ? "处理中..." : "🤖 开始识别标签（0个）"), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+			const procBtn = btnRow.createEl("button", { text: (this.taggerProcessing ? t("处理中...") : tf("🤖 开始识别标签（{n}个）", { n: 0 })), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
 			procBtn.addEventListener("click", () => {
 				const files = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
 				void this.runAITagging(files);
 			});
-			const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+			const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); rerender(); });
 			if (this.taggerProcessing) {
-				const stopBtn = btnRow.createEl("button", { text: "⏹ 停止", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+				const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
 				stopBtn.addEventListener("click", () => this.cancelAI());
 			}
 			const updateConfirm = () => {
 				const size = this.fpSelected.size;
-				procBtn.setText(this.taggerProcessing ? "处理中..." : "🤖 开始识别标签（" + size + "个）");
+				procBtn.setText(this.taggerProcessing ? t("处理中...") : tf("🤖 开始识别标签（{n}个）", { n: size }));
 				const disabled = this.taggerProcessing || size === 0;
 				procBtn.style.opacity = disabled ? "0.5" : "1";
 				procBtn.style.pointerEvents = disabled ? "none" : "auto";
 			};
 			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm, this.taggerExpanded); updateConfirm(); };
-			toolBtn("全选", () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
-			toolBtn("取消全选", () => { this.fpSelected.clear(); rerender(); });
+			toolBtn(t("全选"), () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
+			toolBtn(t("取消全选"), () => { this.fpSelected.clear(); rerender(); });
 			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
 			rerender();
 		}
@@ -2286,7 +2286,7 @@ export class MainSidebarView extends ItemView {
 		if (files.length === 0 || this.taggerProcessing) return;
 		this.taggerProcessing = true;
 		this.resetAI();
-		this.taggerStatusText = "准备处理 " + files.length + " 个文件...";
+		this.taggerStatusText = tf("准备处理 {n} 个文件...", { n: files.length });
 		void this.renderTaggerView();
 
 		const existingTags = await this.plugin.loadExistingKnowledgeTags();
@@ -2297,7 +2297,7 @@ export class MainSidebarView extends ItemView {
 		for (let i = 0; i < files.length; i++) {
 			if (this.aiCancelled) break;
 			const file = files[i]!;
-			this.taggerStatusText = "正在识别 (" + (i + 1) + "/" + files.length + ") " + file.basename + "...";
+			this.taggerStatusText = tf("正在识别 ({cur}/{total}) {name}...", { cur: i + 1, total: files.length, name: file.basename });
 			void this.renderTaggerView();
 
 			try {
@@ -2331,9 +2331,9 @@ export class MainSidebarView extends ItemView {
 		}
 
 		this.taggerProcessing = false;
-		this.taggerStatusText = (this.aiCancelled ? "已中止" : "完成") + "！成功 " + successCount + " 个，失败 " + failCount + " 个";
+		this.taggerStatusText = (this.aiCancelled ? t("已中止") : t("完成")) + tf("！成功 {a} 个，失败 {b} 个", { a: successCount, b: failCount });
 		void this.renderTaggerView();
-		new Notice((this.aiCancelled ? "AI标签已中止：" : "AI标签完成：") + "成功 " + successCount + "，失败 " + failCount);
+		new Notice((this.aiCancelled ? tf("AI标签已中止：成功 {a}，失败 {b}", { a: successCount, b: failCount }) : tf("AI标签完成：成功 {a}，失败 {b}", { a: successCount, b: failCount })));
 	}
 
 	// ===================== NOTE GENERATION =====================
@@ -2343,7 +2343,7 @@ export class MainSidebarView extends ItemView {
 		const el = this.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
+		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
 		backBtn.addEventListener("click", () => {
 			this.cancelAI();
 			if (this.noteGenMode === "preview" && this.noteGenResultText) {
@@ -2361,15 +2361,15 @@ export class MainSidebarView extends ItemView {
 
 		if (this.noteGenIsGenerating && this.noteGenMode === "picker") {
 			const status = el.createDiv({ attr: { style: "text-align:center;padding:40px 0;font-size:18px;color:var(--text-muted);" } });
-			status.createDiv({ text: "🤖 正在批量生成笔记..." });
-			status.createDiv({ text: "点击停止可中断，已完成的笔记会被保留", attr: { style: "font-size:15px;margin-top:8px;color:var(--text-faint);" } });
-			const stopBtn = status.createEl("button", { text: "⏹ 停止", attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+			status.createDiv({ text: t("🤖 正在批量生成笔记...") });
+			status.createDiv({ text: t("点击停止可中断，已完成的笔记会被保留"), attr: { style: "font-size:15px;margin-top:8px;color:var(--text-faint);" } });
+			const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
 			stopBtn.addEventListener("click", () => this.cancelAI());
 			return;
 		}
 
-		el.createDiv({ text: "🤖 AI生成笔记", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "AI按原文结构浓缩生成知识点笔记（标题序号原样保留、正文精华缩写），自动识别标签并存入笔记库", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
+		el.createDiv({ text: t("🤖 AI生成笔记"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: t("AI按原文结构浓缩生成知识点笔记（标题序号原样保留、正文精华缩写），自动识别标签并存入笔记库"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
 
 		if (this.noteGenMode === "preview") {
 			this.renderNoteGenPreview(el);
@@ -2378,11 +2378,11 @@ export class MainSidebarView extends ItemView {
 
 		const typeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
 		const types: { key: NoteGenSourceType; label: string }[] = [
-			{ key: "current", label: "当前文件" },
-			{ key: "doc", label: "文件/文档" },
-			{ key: "question", label: "题目" },
-			{ key: "wrong", label: "错题" },
-			{ key: "note", label: "现有笔记" },
+			{ key: "current", label: t("当前文件") },
+			{ key: "doc", label: t("文件/文档") },
+			{ key: "question", label: t("题目") },
+			{ key: "wrong", label: t("错题") },
+			{ key: "note", label: t("现有笔记") },
 		];
 		for (const t of types) {
 			const btn = typeRow.createEl("button", { text: t.label, attr: { style: "padding:4px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);background:" + (this.noteGenSourceType === t.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
@@ -2396,19 +2396,19 @@ export class MainSidebarView extends ItemView {
 			const activeFile = this.app.workspace.getActiveFile();
 			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-				listWrap.createDiv({ text: "请先打开一个文档（md/txt/rtf/docx/pdf/图片）", attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+				listWrap.createDiv({ text: t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
 			} else {
 				const info = listWrap.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
-				info.createSpan({ text: "当前文件：" });
+				info.createSpan({ text: t("当前文件：") });
 				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);" } });
 				info.createDiv({ text: this.fileSizeInfo(activeFile), attr: { style: "color:var(--text-muted);margin-top:2px;" } });
-				const genCurBtn = listWrap.createEl("button", { text: "🤖 基于当前文件生成笔记", attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
+				const genCurBtn = listWrap.createEl("button", { text: t("🤖 基于当前文件生成笔记"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
 				genCurBtn.addEventListener("click", () => {
 					void (async () => {
 						const f = this.app.workspace.getActiveFile();
 						if (!f) return;
 						const text = await this.noteSourceToText(f);
-						if (!text || text.trim().length === 0) { new Notice("未能读取文件内容"); return; }
+						if (!text || text.trim().length === 0) { new Notice(t("未能读取文件内容")); return; }
 						await this.noteGenStartDirect(f.basename, text, f.path);
 					})();
 				});
@@ -2417,18 +2417,18 @@ export class MainSidebarView extends ItemView {
 		}
 
 		const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-		const genBtn = btnRow.createEl("button", { text: "🤖 生成笔记（0篇）", attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
+		const genBtn = btnRow.createEl("button", { text: tf("🤖 生成笔记（{n}篇）", { n: 0 }), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
 		genBtn.addEventListener("click", () => {
 			const keys = [...this.noteGenSelected];
 			if (keys.length === 0) return;
 			if (keys.length === 1) void this.noteGenGenerateOne(keys[0]!);
 			else void this.noteGenGenerateBatch();
 		});
-		const clearBtn = btnRow.createEl("button", { text: "清空选择", attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
+		const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 		clearBtn.addEventListener("click", () => { this.noteGenSelected.clear(); void this.renderNoteGenView(); });
 		const updateConfirm = () => {
 			const size = this.noteGenSelected.size;
-			genBtn.setText("🤖 生成笔记（" + size + "篇）");
+			genBtn.setText(tf("🤖 生成笔记（{n}篇）", { n: size }));
 			const disabled = size === 0;
 			genBtn.style.opacity = disabled ? "0.5" : "1";
 			genBtn.style.pointerEvents = disabled ? "none" : "auto";
@@ -2437,7 +2437,7 @@ export class MainSidebarView extends ItemView {
 		if (this.noteGenSourceType === "wrong") {
 			this.noteGenWrongNotes = await this.plugin.loadAllWrongNotes();
 			if (this.noteGenWrongNotes.length === 0) {
-				listWrap.createDiv({ text: "暂无错题记录", attr: { style: "color:var(--text-faint);text-align:center;padding:30px 0;font-size:19px;" } });
+				listWrap.createDiv({ text: t("暂无错题记录"), attr: { style: "color:var(--text-faint);text-align:center;padding:30px 0;font-size:19px;" } });
 			} else {
 				const infoEl = listWrap.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
 				const listEl = listWrap.createDiv({ attr: { style: "max-height:360px;overflow-y:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px 8px;" } });
@@ -2448,7 +2448,7 @@ export class MainSidebarView extends ItemView {
 					cb.checked = this.noteGenSelected.has(key);
 					const sync = () => {
 						cb.checked ? this.noteGenSelected.add(key) : this.noteGenSelected.delete(key);
-						infoEl.setText("共 " + this.noteGenWrongNotes.length + " 条错题，已选 " + this.noteGenSelected.size + " 条");
+						infoEl.setText(tf("共 {a} 条错题，已选 {b} 条", { a: this.noteGenWrongNotes.length, b: this.noteGenSelected.size }));
 						updateConfirm();
 					};
 					row.createSpan({ text: (note.sourceFile || note.baseName).replace(/\[\[|\]\]/g, ""), attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
@@ -2459,7 +2459,7 @@ export class MainSidebarView extends ItemView {
 					});
 					cb.addEventListener("change", sync);
 				}
-				infoEl.setText("共 " + this.noteGenWrongNotes.length + " 条错题，已选 " + this.noteGenSelected.size + " 条");
+				infoEl.setText(tf("共 {a} 条错题，已选 {b} 条", { a: this.noteGenWrongNotes.length, b: this.noteGenSelected.size }));
 			}
 			this.noteGenFiles = [];
 		} else {
@@ -2468,7 +2468,7 @@ export class MainSidebarView extends ItemView {
 			else this.noteGenFiles = await this.listNoteViewFiles(this.plugin.rootPath(this.plugin.settings.noteViewFolder));
 
 			const infoEl = listWrap.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
-			const searchInput = listWrap.createEl("input", { attr: { type: "text", placeholder: "搜索文件名...", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
+			const searchInput = listWrap.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
 
 			const toolBar = listWrap.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
 			const toolBtn = (label: string, cb: () => void) => {
@@ -2478,8 +2478,8 @@ export class MainSidebarView extends ItemView {
 
 			const listEl = listWrap.createDiv({ attr: { style: "max-height:360px;overflow-y:auto;" } });
 			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.noteGenFiles, this.noteGenSelected, rerender, updateConfirm, this.noteGenExpanded); updateConfirm(); };
-			toolBtn("全选", () => { this.noteGenFiles.forEach(f => this.noteGenSelected.add(f.path)); rerender(); });
-			toolBtn("取消全选", () => { this.noteGenSelected.clear(); rerender(); });
+			toolBtn(t("全选"), () => { this.noteGenFiles.forEach(f => this.noteGenSelected.add(f.path)); rerender(); });
+			toolBtn(t("取消全选"), () => { this.noteGenSelected.clear(); rerender(); });
 			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
 			rerender();
 		}
@@ -2490,25 +2490,25 @@ export class MainSidebarView extends ItemView {
 	renderNoteGenPreview(el: HTMLElement) {
 		if (this.noteGenIsGenerating) {
 			const status = el.createDiv({ attr: { style: "text-align:center;padding:40px 0;font-size:18px;color:var(--text-muted);" } });
-			status.createSpan({ text: "🤖 正在生成笔记..." });
-			status.createDiv({ text: "根据「" + (this.noteGenTargetName || "") + "」生成中，请稍候", attr: { style: "font-size:16px;margin-top:8px;color:var(--text-faint);" } });
-			const stopBtn = status.createEl("button", { text: "⏹ 停止", attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+			status.createSpan({ text: t("🤖 正在生成笔记...") });
+			status.createDiv({ text: tf("根据「{name}」生成中，请稍候", { name: this.noteGenTargetName || "" }), attr: { style: "font-size:16px;margin-top:8px;color:var(--text-faint);" } });
+			const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
 			stopBtn.addEventListener("click", () => this.cancelAI());
 			return;
 		}
 
-		el.createDiv({ text: "生成预览", attr: { style: "font-size:20px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: "来源：" + (this.noteGenTargetName || ""), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
-		el.createDiv({ text: "内容（可编辑）：", attr: { style: "font-size:18px;margin-bottom:4px;" } });
+		el.createDiv({ text: t("生成预览"), attr: { style: "font-size:20px;font-weight:bold;margin-bottom:4px;" } });
+		el.createDiv({ text: tf("来源：{name}", { name: this.noteGenTargetName || "" }), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
+		el.createDiv({ text: t("内容（可编辑）："), attr: { style: "font-size:18px;margin-bottom:4px;" } });
 		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;resize:vertical;" } });
 		textArea.value = this.noteGenResultText;
 		textArea.addEventListener("input", () => { this.noteGenResultText = textArea.value; });
 
-		el.createDiv({ text: "知识点标签（可编辑）：", attr: { style: "font-size:18px;margin:8px 0 4px;" } });
-		const tagsInput = el.createEl("input", { attr: { type: "text", value: this.noteGenResultTags.join(", "), placeholder: "标签之间用逗号分隔", style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;" } });
+		el.createDiv({ text: t("知识点标签（可编辑）："), attr: { style: "font-size:18px;margin:8px 0 4px;" } });
+		const tagsInput = el.createEl("input", { attr: { type: "text", value: this.noteGenResultTags.join(", "), placeholder: t("标签之间用逗号分隔"), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;" } });
 		tagsInput.addEventListener("input", () => { this.noteGenResultTags = tagsInput.value.split(/[,，、;；]/).map(s => s.trim().replace(/^#+/, "")).filter(Boolean); });
 
-		el.createDiv({ text: "保存后文件名：" + safeName(this.noteGenTargetName || "AI笔记") + "_笔记_日期.md", attr: { style: "color:var(--text-faint);font-size:15px;margin:8px 0;" } });
+		el.createDiv({ text: t("保存后文件名：") + safeName(this.noteGenTargetName || "AI笔记") + "_笔记_日期.md", attr: { style: "color:var(--text-faint);font-size:15px;margin:8px 0;" } });
 
 		const btnRow = el.createDiv({ attr: { style: "margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;" } });
 		const cta = (label: string, cb: () => void) => {
@@ -2519,12 +2519,12 @@ export class MainSidebarView extends ItemView {
 			const b = btnRow.createEl("button", { text: label, attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 			b.addEventListener("click", cb);
 		};
-		cta("保存到笔记库", () => { void this.noteGenSaveSingle(); });
-		plain("重新生成", () => {
+		cta(t("保存到笔记库"), () => { void this.noteGenSaveSingle(); });
+		plain(t("重新生成"), () => {
 			if (this.noteGenTargetKey) void this.noteGenGenerateOne(this.noteGenTargetKey);
 			else if (this.noteGenSourceText) void this.noteGenStartDirect(this.noteGenTargetName, this.noteGenSourceText, this.noteGenTargetPath);
 		});
-		plain("取消返回", () => { this.noteGenResultText = ""; this.noteGenMode = "picker"; void this.renderNoteGenView(); });
+		plain(t("取消返回"), () => { this.noteGenResultText = ""; this.noteGenMode = "picker"; void this.renderNoteGenView(); });
 	}
 
 	noteGenFindItem(key: string): { name: string; sourcePath: string; file?: TFile; wrongNote?: WrongAnswerNote } | null {
@@ -2559,7 +2559,7 @@ export class MainSidebarView extends ItemView {
 
 	async noteGenStartDirect(name: string, content: string, sourcePath: string) {
 		if (this.noteGenIsGenerating) return;
-		if (!content || content.trim().length === 0) { new Notice("内容为空，无法生成笔记"); return; }
+		if (!content || content.trim().length === 0) { new Notice(t("内容为空，无法生成笔记")); return; }
 		this.activeSection = "home";
 		this.homeView = "noteGen";
 		this.noteGenMode = "preview";
@@ -2579,11 +2579,11 @@ export class MainSidebarView extends ItemView {
 				this.noteGenResultText = body;
 				this.noteGenResultTags = tags;
 			} else {
-				new Notice("笔记生成失败：AI返回内容为空");
+				new Notice(t("笔记生成失败：AI返回内容为空"));
 			}
 		} catch (err) {
-			if ((err as Error).name === "AbortError") new Notice("已中止");
-			else new Notice("笔记生成失败：" + (err as Error).message);
+			if ((err as Error).name === "AbortError") new Notice(t("已中止"));
+			else new Notice(tf("笔记生成失败：{msg}", { msg: (err as Error).message }));
 		} finally {
 			this.noteGenIsGenerating = false;
 			if (!this.noteGenResultText) this.noteGenMode = "picker";
@@ -2594,7 +2594,7 @@ export class MainSidebarView extends ItemView {
 	async noteGenGenerateOne(key: string) {
 		if (this.noteGenIsGenerating) return;
 		const item = this.noteGenFindItem(key);
-		if (!item) { new Notice("找不到所选内容"); return; }
+		if (!item) { new Notice(t("找不到所选内容")); return; }
 		const content = await this.noteGenItemContent(item);
 		await this.noteGenStartDirect(item.name, content, item.sourcePath);
 		this.noteGenTargetKey = key;
@@ -2616,10 +2616,10 @@ export class MainSidebarView extends ItemView {
 					const item = this.noteGenFindItem(key);
 					if (!item) { fail++; continue; }
 					const content = await this.noteGenItemContent(item);
-					if (!content || content.trim().length === 0) { fail++; new Notice("内容为空，已跳过：" + item.name); continue; }
+					if (!content || content.trim().length === 0) { fail++; new Notice(tf("内容为空，已跳过：{name}", { name: item.name })); continue; }
 					const full = await this.callAIWithPrompt(buildNotePrompt(content, item.name));
 					const { tags, body } = parseNoteResult(full || "");
-					if (!body) { fail++; new Notice("生成失败：" + item.name); continue; }
+					if (!body) { fail++; new Notice(tf("生成失败：{name}", { name: item.name })); continue; }
 					const saved = await this.noteGenWriteNote(body, tags, item.name, item.sourcePath);
 					if (saved) ok++; else fail++;
 				} catch (err) {
@@ -2631,9 +2631,9 @@ export class MainSidebarView extends ItemView {
 					console.error("[question-generator] 批量生成笔记失败:", err);
 					fail++;
 				}
-				new Notice("笔记生成中：" + (i + 1) + "/" + keys.length + "（成功 " + ok + "，失败 " + fail + "）");
+				new Notice(tf("笔记生成中：{cur}/{total}（成功 {ok}，失败 {fail}）", { cur: i + 1, total: keys.length, ok, fail }));
 			}
-			new Notice(this.aiCancelled ? "已中止：成功 " + ok + "，失败 " + fail : "笔记生成完成：成功 " + ok + "，失败 " + fail);
+			new Notice(this.aiCancelled ? tf("已中止：成功 {ok}，失败 {fail}", { ok, fail }) : tf("笔记生成完成：成功 {ok}，失败 {fail}", { ok, fail }));
 		} finally {
 			this.noteGenIsGenerating = false;
 			if (!this.aiCancelled) this.noteGenSelected.clear();
@@ -2643,10 +2643,10 @@ export class MainSidebarView extends ItemView {
 
 	async noteGenSaveSingle() {
 		const body = this.noteGenResultText;
-		if (!body || body.trim().length === 0) { new Notice("内容为空，无法保存"); return; }
+		if (!body || body.trim().length === 0) { new Notice(t("内容为空，无法保存")); return; }
 		const ok = await this.noteGenWriteNote(body, this.noteGenResultTags, this.noteGenTargetName, this.noteGenTargetPath);
 		if (ok) {
-			new Notice("笔记已保存");
+			new Notice(t("笔记已保存"));
 			this.noteGenResultText = "";
 			this.noteGenResultTags = [];
 			this.noteGenTargetKey = "";
@@ -2659,7 +2659,7 @@ export class MainSidebarView extends ItemView {
 
 	async noteGenWriteNote(body: string, tags: string[], sourceName: string, sourcePath: string): Promise<boolean> {
 		const folder = this.plugin.rootPath(this.plugin.settings.noteViewFolder);
-		if (!folder) { new Notice("请先在设置中配置笔记文件夹"); return false; }
+		if (!folder) { new Notice(t("请先在设置中配置笔记文件夹")); return false; }
 		try {
 			await ensureFolder(this.app, folder);
 			const dateStr = new Date().toISOString().slice(0, 10);
@@ -2680,7 +2680,7 @@ export class MainSidebarView extends ItemView {
 			this.plugin.emitDataChanged();
 			this.syncToKnowledgeIndex(tags, fileName.replace(/\.md$/, ""), joinPath(folder, fileName), "笔记");
 			return true;
-		} catch (err) { new Notice("保存失败：" + (err as Error).message); console.error("[question-generator] 保存笔记失败:", err); return false; }
+		} catch (err) { new Notice(tf("保存失败：{msg}", { msg: (err as Error).message })); console.error("[question-generator] 保存笔记失败:", err); return false; }
 	}
 
 	// ===================== KNOWLEDGE MANAGER =====================
