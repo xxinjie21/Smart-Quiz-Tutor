@@ -16,6 +16,9 @@ export function stripMd(text: string): string {
 const EXAM_SECTION_NAMES = new Set([
 	"单选题", "多选题", "判断题", "填空题", "简答题", "名词解释", "论述题",
 	"计算题", "综合题", "问答题", "案例分析题", "案例分析", "解答题", "材料题", "改错题",
+	"Single Choice", "Multiple Choice", "True/False", "True or False", "Fill in the Blank",
+	"Short Answer", "Essay", "Term Explanation", "Discussion", "Calculation", "Case Analysis",
+	"Comprehensive", "Error Correction",
 ]);
 
 export function parseQuestions(text: string): ParsedQuestion[] {
@@ -23,7 +26,7 @@ export function parseQuestions(text: string): ParsedQuestion[] {
 	const questions: ParsedQuestion[] = [];
 
 	const answerBlock: Record<number, string> = {};
-	const abMatch = cleaned.match(/答案\s*汇总[：:\s]*\n([\s\S]*?)$/i);
+	const abMatch = cleaned.match(/(?:答案\s*汇总|Answer\s*Summary)[：:\s]*\n([\s\S]*?)$/i);
 	if (abMatch && abMatch[1]) {
 		for (const line of abMatch[1].split("\n")) {
 			const m = line.trim().match(/^(\d+)[.、）)\s]+([A-D]+)/);
@@ -34,7 +37,7 @@ export function parseQuestions(text: string): ParsedQuestion[] {
 	const lines = text.split("\n");
 	let summaryStop = lines.length;
 	for (let i = 0; i < lines.length; i++) {
-		if (/^\s*答案\s*汇总[：:\s]*$/.test(lines[i]!)) { summaryStop = i; break; }
+		if (/^\s*(?:答案\s*汇总|Answer\s*Summary)[：:\s]*$/i.test(lines[i]!)) { summaryStop = i; break; }
 	}
 
 	type Cur = { num: number; qText: string; opts: { label: string; text: string }[]; answer: string; explanation: string };
@@ -124,7 +127,7 @@ export function parseQuestions(text: string): ParsedQuestion[] {
 				pushCurrent();
 				current = {
 					num: parseInt(numMatch[1]),
-					qText: rest.replace(/^(?:题干|题目|问题|试题)[：:]\s*/i, ""),
+					qText: rest.replace(/^(?:题干|题目|问题|试题|Question|Stem)[：:]\s*/i, ""),
 					opts: [],
 					answer: "",
 					explanation: "",
@@ -177,7 +180,7 @@ export function parseQuestions(text: string): ParsedQuestion[] {
 			continue;
 		}
 
-		const answerLabel = content.match(/^(?:标准)?(?:答案|参考答案)[：:]\s*(.*)$/);
+		const answerLabel = content.match(/^(?:标准)?(?:答案|参考答案|Answer|Reference Answer)[：:]\s*(.*)$/i);
 		if (answerLabel) {
 			const rest = answerLabel[1]!.trim();
 			if (rest) current.answer = rest;
