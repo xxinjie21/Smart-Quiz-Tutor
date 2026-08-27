@@ -1,7 +1,7 @@
 {
 	"id": "smart-quiz-tutor",
 	"name": "Smart Question Tutor",
-	"version": "2.1.0",
+	"version": "2.1.1",
 	"minAppVersion": "1.12.0",
 	"description": "读取本地md知识库，调用Ollama/OpenAI兼容API自动生成试题，支持导出MD、Word、PDF，AI识别试卷、错题本、间隔复习.",
 	"author": "XXJ",
