@@ -94,6 +94,11 @@ if (prod) {
 		code = code.replace(/function m\(\)\{var v=\w+\.documentElement;[\s\S]{0,300}?\w+\.createElement\("script"\)[\s\S]{0,300}?\}\}/, 'function m(){}');
 	}
 
+	// 4. Neutralize the bare `eval` reference inside docx's bundled es-abstract intrinsics table.
+	//    es-abstract stores "%eval%" in its intrinsics map but never invokes it, so replacing the
+	//    reference with `void 0` is functionally inert and silences Obsidian's `no-eval` lint.
+	code = code.replace(/"%eval%"\s*:\s*eval\b/g, '"%eval%": void 0');
+
 	writeFileSync('main.js', code);
 	process.exit(0);
 } else {
