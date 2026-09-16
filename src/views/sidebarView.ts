@@ -31,6 +31,7 @@ import { ChatPanel } from "./chatPanel";
 import { renderSettingsTab as renderSettingsSection } from "./sidebar/settings";
 import { renderHistoryView as renderHistorySection } from "./sidebar/history";
 import { renderKnowledgeManager as renderKnowledgeManagerSection } from "./sidebar/knowledge";
+import { renderReviewTab as renderReviewTabSection } from "./sidebar/review";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
@@ -1378,7 +1379,7 @@ export class MainSidebarView extends ItemView {
 		new Notice(tf("已导出 {n} 个文件", { n: parts.length }));
 	}
 
-	private async updateReviewSchedule(note: WrongAnswerNote, source: "wrong" | "question" | "note", wasCorrect: boolean): Promise<{ correctCount: number; interval: number; nextReview: string }> {
+	async updateReviewSchedule(note: WrongAnswerNote, source: "wrong" | "question" | "note", wasCorrect: boolean): Promise<{ correctCount: number; interval: number; nextReview: string }> {
 		const intervals = source === "wrong" ? parseReviewIntervals(this.plugin.settings.wrongReviewIntervals, DEFAULT_WRONG_INTERVALS)
 			: source === "question" ? parseReviewIntervals(this.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS)
 			: parseReviewIntervals(this.plugin.settings.noteReviewIntervals, DEFAULT_NOTE_INTERVALS);
@@ -1421,141 +1422,7 @@ export class MainSidebarView extends ItemView {
 	}
 
 	// ===================== REVIEW TAB =====================
-	async renderReviewTab() {
-		if (!this.innerContentEl) return;
-		const el = this.innerContentEl;
-		el.empty();
-
-		const wrongNotes = await this.plugin.loadAllWrongNotes();
-		const questionFiles = await this.plugin.loadAllQuestionFilesForReview();
-		const vaultNotes = await this.plugin.loadAllVaultNotesForReview();
-
-		type ReviewItem = { note: WrongAnswerNote; source: "wrong" | "question" | "note" };
-		const allItems: ReviewItem[] = [
-			...wrongNotes.map(n => ({ note: n, source: "wrong" as const })),
-			...questionFiles.map(n => ({ note: n, source: "question" as const })),
-			...vaultNotes.map(n => ({ note: n, source: "note" as const })),
-		];
-
-		const filterBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
-		const filterOpts: { key: "all" | "wrong" | "question" | "note"; label: string }[] = [
-			{ key: "all", label: t("全部") },
-			{ key: "wrong", label: t("错题") },
-			{ key: "question", label: t("题目") },
-			{ key: "note", label: t("笔记") },
-		];
-		const dueItems = allItems.filter(i => isDueForReview(i.note));
-		for (const opt of filterOpts) {
-			const count = opt.key === "all" ? dueItems.length : dueItems.filter(i => i.source === opt.key).length;
-			const btn = filterBar.createEl("button", { text: opt.label + " (" + count + ")", attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.reviewFilterType === opt.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-			btn.addEventListener("click", () => { this.reviewFilterType = opt.key; void this.renderReviewTab(); });
-		}
-
-		const sortBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
-		const sortOpts: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
-			{ key: "default", label: t("默认") },
-			{ key: "source", label: t("按源文件") },
-			{ key: "tag", label: t("按知识点") },
-			{ key: "time", label: t("按时间") },
-		];
-		for (const opt of sortOpts) {
-			const btn = sortBar.createEl("button", { text: opt.label, attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.reviewSortBy === opt.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-			btn.addEventListener("click", () => { this.reviewSortBy = opt.key; void this.renderReviewTab(); });
-		}
-
-		if (dueItems.length === 0) {
-			el.createDiv({ text: t("今日暂无待复习内容，继续学习积累吧！"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } });
-			return;
-		}
-
-		const filteredDue = this.reviewFilterType === "all" ? dueItems : dueItems.filter(i => i.source === this.reviewFilterType);
-
-		const sourceLabel: Record<string, string> = { wrong: t("错题"), question: t("题目"), note: t("笔记") };
-		const sourceColor: Record<string, string> = { wrong: "var(--color-red)", question: "var(--interactive-accent)", note: "var(--color-green)" };
-
-		const banner = el.createDiv({ attr: { style: "padding:14px 16px;margin-bottom:14px;border-radius:8px;border:2px solid var(--interactive-accent);background:color-mix(in srgb, var(--interactive-accent) 8%, transparent);" } });
-		const bTop = banner.createDiv({ attr: { style: "display:flex;align-items:center;justify-content:space-between;" } });
-		bTop.createDiv({ text: t("今日待复习"), attr: { style: "font-size:20px;font-weight:700;color:var(--interactive-accent);" } });
-		bTop.createDiv({ text: tf("{n} 项", { n: dueItems.length }), attr: { style: "font-size:26px;font-weight:bold;color:var(--interactive-accent);" } });
-		const parts: string[] = [];
-		const wDue = dueItems.filter(i => i.source === "wrong").length;
-		const qDue = dueItems.filter(i => i.source === "question").length;
-		const nDue = dueItems.filter(i => i.source === "note").length;
-		if (wDue > 0) parts.push(tf("错题 {n}", { n: wDue }));
-		if (qDue > 0) parts.push(tf("题目 {n}", { n: qDue }));
-		if (nDue > 0) parts.push(tf("笔记 {n}", { n: nDue }));
-		if (parts.length > 0) banner.createDiv({ text: parts.join("　"), attr: { style: "font-size:17px;color:var(--text-muted);margin-top:4px;" } });
-
-		const sortedDue = [...filteredDue];
-		if (this.reviewSortBy === "source") {
-			sortedDue.sort((a, b) => (a.note.sourceFile || a.note.baseName).localeCompare(b.note.sourceFile || b.note.baseName));
-		} else if (this.reviewSortBy === "tag") {
-			sortedDue.sort((a, b) => (knowledgeTags(a.note.tags)[0] || "").localeCompare(knowledgeTags(b.note.tags)[0] || ""));
-		} else if (this.reviewSortBy === "time") {
-			sortedDue.sort((a, b) => (a.note.nextReview || "").localeCompare(b.note.nextReview || ""));
-		} else {
-			const priority: Record<string, number> = { wrong: 0, question: 1, note: 2 };
-			sortedDue.sort((a, b) => priority[a.source]! - priority[b.source]!);
-		}
-
-		let lastGroup = "";
-		for (const item of sortedDue) {
-			const groupKey = this.reviewSortBy === "source" ? (item.note.sourceFile || item.note.baseName) : this.reviewSortBy === "tag" ? (knowledgeTags(item.note.tags)[0] || t("无标签")) : "";
-			if (this.reviewSortBy !== "default" && groupKey && groupKey !== lastGroup) {
-				if (lastGroup !== "") el.createDiv({ attr: { style: "height:6px;" } });
-				el.createDiv({ text: groupKey, attr: { style: "font-size:16px;font-weight:500;color:var(--text-faint);margin-bottom:4px;padding-left:4px;" } });
-				lastGroup = groupKey;
-			}
-			this.renderReviewRow(el, item, sourceLabel, sourceColor, daysUntil);
-		}
-	}
-
-	private renderReviewRow(container: HTMLElement, item: { note: WrongAnswerNote; source: string }, sourceLabel: Record<string, string>, sourceColor: Record<string, string>, daysUntil: (s: string) => number) {
-		const row = container.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;transition:background 0.15s;" } });
-		row.classList.add("qg-hover-bg");
-		row.createSpan({ text: sourceLabel[item.source] || item.source, attr: { style: "min-width:32px;font-size:13px;padding:1px 5px;border-radius:3px;background:" + (sourceColor[item.source] || "var(--text-muted)") + ";color:white;" } });
-		const nameText = (item.note.sourceFile || item.note.baseName).replace(/\[\[|\]\]/g, "");
-		row.createSpan({ text: nameText, attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--interactive-accent);" } });
-		const kp = knowledgeTags(item.note.tags);
-		this.renderKnowledgeTags(row, kp);
-		if (item.source === "wrong" && (item.note.wrongCount || 0) > 0) row.createSpan({ text: tf("错{n}次", { n: item.note.wrongCount }), attr: { style: "font-size:15px;color:var(--color-red);min-width:36px;text-align:right;flex-shrink:0;" } });
-		if (item.note.nextReview) {
-			const isOverdue = isDueForReview(item.note);
-			if (isOverdue) {
-				row.createSpan({ text: t("已到期"), attr: { style: "font-size:15px;color:var(--interactive-accent);font-weight:600;min-width:44px;text-align:right;" } });
-			} else {
-				row.createSpan({ text: tf("{d}天后", { d: daysUntil(item.note.nextReview) }), attr: { style: "font-size:15px;color:var(--text-faint);min-width:44px;text-align:right;" } });
-			}
-		}
-		const doneBtn = row.createEl("button", { text: t("✓ 完成"), attr: { style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:15px;border:1px solid var(--color-green);background:transparent;color:var(--color-green);white-space:nowrap;" } });
-		doneBtn.addEventListener("click", (e) => { e.stopPropagation(); void this.markReviewDone(item.note, item.source as "wrong" | "question" | "note"); });
-		const failBtn = row.createEl("button", { text: t("✗ 仍错"), attr: { style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:15px;border:1px solid var(--color-red);background:transparent;color:var(--color-red);white-space:nowrap;" } });
-		failBtn.addEventListener("click", (e) => { e.stopPropagation(); void this.markReviewStillWrong(item.note, item.source as "wrong" | "question" | "note"); });
-		row.addEventListener("click", () => {
-			if (item.source === "wrong") { this.wrongView = "detail"; this.wrongCurrentNote = item.note; this.activeSection = "wrong"; void this.render(); }
-			else { void this.app.workspace.openLinkText(item.note.baseName, "", false); }
-		});
-	}
-
-	private async markReviewDone(note: WrongAnswerNote, source: "wrong" | "question" | "note") {
-		try {
-			const result = await this.updateReviewSchedule(note, source, true);
-			new Notice(tf("已标记完成！下次复习 {d}（间隔{i}天）", { d: result.nextReview, i: result.interval }));
-			void this.renderReviewTab();
-		} catch (err) {
-			new Notice(tf("更新复习计划失败：{msg}", { msg: (err as Error).message }));
-		}
-	}
-
-	private async markReviewStillWrong(note: WrongAnswerNote, source: "wrong" | "question" | "note") {
-		try {
-			await this.updateReviewSchedule(note, source, false);
-			new Notice(t("已记录错误，明天复习"));
-			void this.renderReviewTab();
-		} catch (err) {
-			new Notice(tf("更新复习计划失败：{msg}", { msg: (err as Error).message }));
-		}
-	}
+	async renderReviewTab() { return renderReviewTabSection(this); }
 
 	// ===================== SETTINGS TAB =====================
 	renderSettingsTab() { renderSettingsSection(this); }
