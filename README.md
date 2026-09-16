@@ -70,6 +70,21 @@
 - Export to **Markdown**, **Word (.docx)** or **PDF**.
 - Answer-free exports are available for self-testing.
 
+### 💬 AI Assistant Chat
+- A built-in chat panel embedded in the **Smart Question Tutor** sidebar (the **AI** tab).
+- Answers are grounded in your notes via retrieval; switch scope between **plugin knowledge base only** and **entire vault**.
+- **Reference notes**: attach the current selection/note (or pick multiple notes) as context for the answer; references show as removable chips and are cleared automatically after sending.
+- The **reference budget** setting caps how much referenced text is fed to the model (default 60000; lower it for small local models).
+- Replies render as Markdown; each message can be copied or regenerated.
+
+### 🔒 Privacy
+- **Local-first**: with Ollama, nothing leaves your machine.
+- When you use an OpenAI-compatible endpoint (including the built-in chat), the **selected context** is sent to that endpoint:
+  - Question generation sends the chosen source text / exam file.
+  - Chat scope **plugin knowledge base** sends matched snippets; scope **entire vault** may send matched note contents from any folder.
+  - Referenced notes are sent in full (up to the reference budget).
+- No telemetry and no hidden network calls. Only the endpoint you configure is contacted.
+
 ### 🌐 Bilingual UI (Chinese / English)
 - One-click **interface language switch** in Settings — the whole UI flips between **中文** and **English** instantly.
 - The switch is also available right inside the sidebar settings; command palette names update after a plugin restart.
@@ -286,6 +301,21 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 ### 📤 专业导出
 - 支持导出 **Markdown**、**Word (.docx)**、**PDF**。
 - 可导出无答案版用于自测。
+
+### 💬 AI 助手对话
+- 内嵌在**智学助手**侧边栏的 **AI** 页签里。
+- 回答基于你的笔记检索结果；检索范围可在 **仅插件知识库** 与 **整个 vault** 间切换。
+- **引用笔记**：把当前选区/笔记（或从文件选择器挑多篇）挂为回答上下文；以可移除的 chip 展示，发送后自动清空。
+- 设置项「引用总预算(字)」限制带入模型的引用文本量（默认 60000，本地小模型建议调小）。
+- 回复按 Markdown 渲染；每条消息可复制、可重新生成。
+
+### 🔒 隐私说明
+- **本地优先**：使用 Ollama 时全部在你本机完成。
+- 使用 OpenAI 兼容接口（含内置对话）时，会把**所选上下文**发送到该接口：
+  - 生成试题：发送你选择的源文本 / 试卷文件。
+  - 对话范围「仅插件知识库」：发送命中的片段；「整个 vault」：可能发送任意文件夹中命中的笔记内容。
+  - 被引用的笔记会完整发送（受引用预算限制）。
+- 无遥测、无隐藏网络请求；只会访问你配置的接口地址。
 
 ### 🌐 中英文双语界面
 - 设置页**一键切换界面语言**，整个界面在 **中文 / English** 间即时切换。

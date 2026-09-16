@@ -421,4 +421,20 @@ export const en: Record<keyof typeof zh, string> = {
 	"疑似重复文件 {n} 组": "{n} possible duplicate file group(s)",
 	// ---- Phase 2: AI prompt related UI ----
 	"图片识别：请确认当前模型支持多模态（视觉）能力": "Image recognition: make sure your model supports multimodal (vision) capability",
+	// ---- Commands & menus ----
+	"智学助手": "Smart Question Tutor",
+	"打开智学助手侧边栏": "Open Smart Question Tutor sidebar",
+	"查看题目生成历史记录": "View question generation history",
+	"查看错题本": "View wrong-answer book",
+	"重建知识点索引": "Rebuild knowledge index",
+	"基于当前文档生成试题": "Generate questions from current document",
+	"识别当前文件试卷": "Extract questions from current file",
+	"选择文件生成题目": "Generate questions from files",
+	"基于本文档生成试题": "Generate questions from this document",
+	"识别本文档试卷": "Extract questions from this document",
+	"基于选中内容生成试题": "Generate questions from selection",
+	"片段": "Snippet",
+	"请先打开一个Markdown文档再使用 Ctrl+Q": "Open a Markdown note first to use Ctrl+Q",
+	"你有 {n} 道错题待复习，点击开始": "You have {n} wrong answers due — click to start",
+	"已迁移 {n} 条旧错题到 {folder}": "Migrated {n} old wrong answers to {folder}",
 };

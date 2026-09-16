@@ -16,7 +16,7 @@ import { KnowledgeService, type IndexSource } from "./services/knowledgeService"
 import { MainSidebarView } from "./views/sidebarView";
 import { ChatView } from "./views/chatView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
-import { setLanguage } from "./i18n/index";
+import { setLanguage, t, tf } from "./i18n/index";
 
 // ===================== 主插件入口 =====================
 
@@ -74,7 +74,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					migrated++;
 				} catch { /* empty */ }
 			}
-			if (migrated > 0) new Notice("已迁移 " + migrated + " 条旧错题到 " + folder);
+			if (migrated > 0) new Notice(tf("已迁移 {n} 条旧错题到 {folder}", { n: migrated, folder }));
 			data.wrongAnswers = [];
 			await this.saveData({ ...this.settings, history: this.history, wrongAnswers: [] });
 		}
@@ -216,7 +216,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				const dateStr = new Date().toISOString().slice(0, 10);
 				const mdHeader = title ? "# " + title + "\n\n> 来源：" + (source || title) + "　|　日期：" + dateStr + "\n\n" : "";
 				fs.writeFileSync(r.filePath, mdHeader + stripAnswerSummarySection(text), "utf-8");
-				new Notice("Md文件已保存");
+				new Notice(t("Md文件已保存"));
 			} else if (format === "word") {
 				const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: defaultName + ".docx", filters: [{ name: "Word", extensions: ["docx"] }] });
 				if (r.canceled || !r.filePath) return;
@@ -224,14 +224,14 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				const doc = new Document({ sections: [{ properties: {}, children }] });
 				const buffer = await Packer.toBuffer(doc);
 				fs.writeFileSync(r.filePath, Buffer.from(buffer));
-				new Notice("Word文件已保存");
+				new Notice(t("Word文件已保存"));
 			} else if (format === "pdf") {
 				const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: defaultName + ".pdf", filters: [{ name: "PDF", extensions: ["pdf"] }] });
 				if (r.canceled || !r.filePath) return;
 				await exportPdfDirect(r.filePath, text, title, source);
-				new Notice("PDF文件已保存");
+				new Notice(t("PDF文件已保存"));
 			}
-		} catch (err) { new Notice("导出失败：" + (err as Error).message); }
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async activateSidebar(): Promise<MainSidebarView | null> {
@@ -273,7 +273,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
 		this.addSettingTab(new QuestionGeneratorSettingTab(this.app, this));
 
-		this.addRibbonIcon("pencil", "智学助手", async () => {
+		this.addRibbonIcon("pencil", t("智学助手"), async () => {
 			const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 			if (leaves.length > 0) {
 				await this.app.workspace.revealLeaf(leaves[0]!);
@@ -307,7 +307,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					const dueCount = notes.filter(n => isDueForReview(n)).length;
 					if (dueCount > 0) {
 						this.registerInterval(window.setTimeout(() => {
-							const notice = new Notice("你有 " + dueCount + " 道错题待复习，点击开始", NOTICE_DURATION_MS);
+							const notice = new Notice(tf("你有 {n} 道错题待复习，点击开始", { n: dueCount }), NOTICE_DURATION_MS);
 							notice.messageEl.addEventListener("click", () => {
 								void (async () => {
 									const view = await this.activateSidebar();
@@ -320,27 +320,27 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			}
 		});
 
-		this.addCommand({ id: "open-sidebar", name: "打开智学助手侧边栏", callback: async () => {
+		this.addCommand({ id: "open-sidebar", name: t("打开智学助手侧边栏"), callback: async () => {
 			await this.activateSidebar();
 		}});
-		this.addCommand({ id: "view-history", name: "查看题目生成历史记录", callback: async () => {
+		this.addCommand({ id: "view-history", name: t("查看题目生成历史记录"), callback: async () => {
 			const view = await this.activateSidebar();
 			if (view) { view.activeSection = "home"; view.homeView = "history"; await view.render(); }
 		}});
-		this.addCommand({ id: "view-wrong-answers", name: "查看错题本", callback: async () => {
+		this.addCommand({ id: "view-wrong-answers", name: t("查看错题本"), callback: async () => {
 			const view = await this.activateSidebar();
 			if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
 		}});
-		this.addCommand({ id: "rebuild-knowledge-index", name: "重建知识点索引", callback: async () => {
+		this.addCommand({ id: "rebuild-knowledge-index", name: t("重建知识点索引"), callback: async () => {
 			const report = await this.rebuildKnowledgeIndex();
 			const extra: string[] = [];
-			if (report.brokenLinks > 0) extra.push("失效链接 " + report.brokenLinks + " 处");
-			if (report.duplicates > 0) extra.push("疑似重复文件 " + report.duplicates + " 组");
-			new Notice(extra.length > 0 ? "知识点索引已重建：" + extra.join("，") : "知识点索引已重建");
+			if (report.brokenLinks > 0) extra.push(tf("失效链接 {n} 处", { n: report.brokenLinks }));
+			if (report.duplicates > 0) extra.push(tf("疑似重复文件 {n} 组", { n: report.duplicates }));
+			new Notice(extra.length > 0 ? t("知识点索引已重建") + "：" + extra.join("，") : t("知识点索引已重建"));
 		} });
 		this.addCommand({
 			id: "generate-from-current",
-			name: "基于当前文档生成试题",
+			name: t("基于当前文档生成试题"),
 			callback: async () => {
 				const view = await this.activateSidebar();
 				if (view) { view.activeSection = "home"; view.openGeneratePicker(); }
@@ -348,10 +348,10 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		});
 		this.addCommand({
 			id: "extract-from-current",
-			name: "识别当前文件试卷",
+			name: t("识别当前文件试卷"),
 			callback: async () => {
 				const file = this.app.workspace.getActiveFile();
-				if (!file) { new Notice("请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）"); return; }
+				if (!file) { new Notice(t("请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）")); return; }
 				const view = await this.activateSidebar();
 				if (view) { view.activeSection = "home"; await view.openCurrentFileExtract(); }
 			}
@@ -360,7 +360,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		this.registerEvent(this.app.workspace.on("file-menu", (menu, file) => {
 			try {
 				if (file instanceof TFolder) {
-					menu.addItem(item => item.setTitle("选择文件生成题目").onClick(async () => {
+					menu.addItem(item => item.setTitle(t("选择文件生成题目")).onClick(async () => {
 						const view = await this.activateSidebar();
 						if (view) { view.activeSection = "home"; view.openGeneratePicker(file.path); }
 					}));
@@ -369,14 +369,14 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					const ext = file.extension.toLowerCase();
 					const isExamSource = ext === "md" || EXAM_SOURCE_EXTS.includes(ext);
 					if (ext === "md") {
-						menu.addItem(item => item.setTitle("基于本文档生成试题").onClick(async () => {
+						menu.addItem(item => item.setTitle(t("基于本文档生成试题")).onClick(async () => {
 							const text = await this.app.vault.read(file);
 							const view = await this.activateSidebar();
 							if (view) { view.activeSection = "home"; view.homeView = "generate"; view.genSourceText = text; view.genFileName = file.name; view.genSourcePath = file.path; await view.render(); }
 						}));
 					}
 					if (isExamSource) {
-						menu.addItem(item => item.setTitle("识别本文档试卷").onClick(async () => {
+						menu.addItem(item => item.setTitle(t("识别本文档试卷")).onClick(async () => {
 							const view = await this.activateSidebar();
 							if (view) { view.activeSection = "home"; await view.openCurrentFileExtract(file); }
 						}));
@@ -391,11 +391,12 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			try {
 				const selectText = editor.getSelection();
 				if (selectText && selectText.trim().length > 0) {
-					const fileName = ("file" in info ? info.file?.name : undefined) || "片段";
+					const snippetFallback = t("片段");
+					const fileName = ("file" in info ? info.file?.name : undefined) || snippetFallback;
 					const filePath = ("file" in info ? info.file?.path : undefined) || "";
-					menu.addItem(item => item.setTitle("基于选中内容生成试题").onClick(async () => {
+					menu.addItem(item => item.setTitle(t("基于选中内容生成试题")).onClick(async () => {
 						let fullText = selectText;
-						if (fileName && fileName !== "片段") {
+						if (fileName && fileName !== snippetFallback) {
 							try {
 								const file = this.app.vault.getAbstractFileByPath(filePath);
 								if (file instanceof TFile) {
@@ -424,7 +425,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 							if (view) { view.activeSection = "home"; view.homeView = "generate"; view.genSourceText = text; view.genFileName = file.name; view.genSourcePath = file.path; await view.render(); }
 						}).catch(e => console.error("[question-generator]", e));
 				} else {
-					new Notice("请先打开一个Markdown文档再使用 Ctrl+Q");
+					new Notice(t("请先打开一个Markdown文档再使用 Ctrl+Q"));
 				}
 			}
 		} catch (e) {

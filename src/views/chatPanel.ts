@@ -80,7 +80,7 @@ export class ChatPanel {
 			void this.plugin.saveSettings();
 			if (scope === "vault") new Notice(t("已切换为整个 vault 范围，笔记内容将发送给 AI"));
 		});
-		const clearBtn = header.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("清空") } });
+		const clearBtn = header.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("清空"), "aria-label": t("清空") } });
 		setIcon(clearBtn, "trash-2");
 		clearBtn.addEventListener("click", () => {
 			this.plugin.settings.chatHistory = [];
@@ -101,15 +101,15 @@ export class ChatPanel {
 		});
 
 		const bar = composer.createDiv({ cls: "qg-chat-composer-bar" });
-		const refBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("添加引用（当前笔记/选区）") } });
+		const refBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("添加引用（当前笔记/选区）"), "aria-label": t("添加引用（当前笔记/选区）") } });
 		setIcon(refBtn, "text-quote");
 		refBtn.addEventListener("click", () => void this.addReference());
 		bar.createDiv({ cls: "qg-chat-spacer" });
-		this.stopBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-stop", attr: { title: t("停止") } });
+		this.stopBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-stop", attr: { title: t("停止"), "aria-label": t("停止") } });
 		setIcon(this.stopBtn, "square");
 		this.stopBtn.addEventListener("click", () => this.cancelAI());
 		this.stopBtn.hide();
-		this.sendBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-send", attr: { title: t("发送") } });
+		this.sendBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-send", attr: { title: t("发送"), "aria-label": t("发送") } });
 		setIcon(this.sendBtn, "arrow-up");
 		this.sendBtn.addEventListener("click", () => void this.send());
 
