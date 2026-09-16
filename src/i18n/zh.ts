@@ -436,4 +436,5 @@ export const zh = {
 	"请先打开一个Markdown文档再使用 Ctrl+Q": "请先打开一个Markdown文档再使用 Ctrl+Q",
 	"你有 {n} 道错题待复习，点击开始": "你有 {n} 道错题待复习，点击开始",
 	"已迁移 {n} 条旧错题到 {folder}": "已迁移 {n} 条旧错题到 {folder}",
+	"无法连接 {url}，请确认服务已启动、接口地址与 API Key 正确": "无法连接 {url}，请确认服务已启动、接口地址与 API Key 正确",
 } as const;

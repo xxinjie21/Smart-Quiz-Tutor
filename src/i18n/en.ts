@@ -437,4 +437,5 @@ export const en: Record<keyof typeof zh, string> = {
 	"请先打开一个Markdown文档再使用 Ctrl+Q": "Open a Markdown note first to use Ctrl+Q",
 	"你有 {n} 道错题待复习，点击开始": "You have {n} wrong answers due — click to start",
 	"已迁移 {n} 条旧错题到 {folder}": "Migrated {n} old wrong answers to {folder}",
+	"无法连接 {url}，请确认服务已启动、接口地址与 API Key 正确": "Cannot reach {url} — check that the service is running and the URL / API key are correct",
 };

@@ -1,5 +1,17 @@
-import { requestUrl } from "obsidian";
+import { requestUrl, type RequestUrlParam } from "obsidian";
 import type { PluginSettings, OllamaResponse, OpenAIResponse, ChatMessage } from "../types";
+import { tf } from "../i18n/index";
+
+/** 统一的 POST JSON 请求，连接失败时给出可操作的提示。 */
+async function postJson(init: RequestUrlParam): Promise<unknown> {
+	try {
+		const res = await requestUrl(init);
+		return res.json;
+	} catch (err) {
+		const detail = (err as Error)?.message || String(err);
+		throw new Error(tf("无法连接 {url}，请确认服务已启动、接口地址与 API Key 正确", { url: init.url }) + (detail ? "（" + detail + "）" : ""));
+	}
+}
 
 export interface ChatLLMOptions {
 	system?: string;
@@ -22,13 +34,12 @@ export async function chatLLM(cfg: PluginSettings, prompt: string, opts?: ChatLL
 		const url = cfg.baseUrl + "/api/generate";
 		const body: Record<string, unknown> = { model: cfg.modelName, prompt, stream: false, temperature: cfg.temperature };
 		if (images.length > 0) body.images = images;
-		const res = await requestUrl({
+		const data = await postJson({
 			url,
 			method: "POST",
 			contentType: "application/json",
 			body: JSON.stringify(body),
-		});
-		const data = res.json as OllamaResponse;
+		}) as OllamaResponse;
 		return data.response || "";
 	}
 	const url = cfg.baseUrl + "/v1/chat/completions";
@@ -45,7 +56,7 @@ export async function chatLLM(cfg: PluginSettings, prompt: string, opts?: ChatLL
 	} else {
 		messages.push({ role: "user", content: prompt });
 	}
-	const res = await requestUrl({
+	const data = await postJson({
 		url,
 		method: "POST",
 		contentType: "application/json",
@@ -56,8 +67,7 @@ export async function chatLLM(cfg: PluginSettings, prompt: string, opts?: ChatLL
 			stream: false,
 			messages,
 		}),
-	});
-	const data = res.json as OpenAIResponse;
+	}) as OpenAIResponse;
 	return data.choices?.[0]?.message?.content || "";
 }
 
@@ -76,19 +86,18 @@ export async function chatMessage(
 		const msgs: OllamaChatMessage[] = [];
 		if (opts?.system) msgs.push({ role: "system", content: opts.system });
 		msgs.push(...(history as OllamaChatMessage[]));
-		const res = await requestUrl({
+		const data = await postJson({
 			url,
 			method: "POST",
 			contentType: "application/json",
 			body: JSON.stringify({ model: cfg.modelName, messages: msgs, stream: false, temperature: cfg.temperature }),
-		});
-		const data = res.json as OllamaChatResponse;
+		}) as OllamaChatResponse;
 		return data.message?.content || "";
 	}
 	const messagesArr: unknown[] = [];
 	if (opts?.system) messagesArr.push({ role: "system", content: opts.system });
 	messagesArr.push(...history);
-	const res = await requestUrl({
+	const data = await postJson({
 		url: cfg.baseUrl + "/v1/chat/completions",
 		method: "POST",
 		contentType: "application/json",
@@ -99,7 +108,6 @@ export async function chatMessage(
 			stream: false,
 			messages: messagesArr,
 		}),
-	});
-	const data = res.json as OpenAIResponse;
+	}) as OpenAIResponse;
 	return data.choices?.[0]?.message?.content || "";
 }
