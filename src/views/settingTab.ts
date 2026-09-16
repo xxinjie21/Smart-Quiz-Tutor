@@ -147,5 +147,13 @@ export class QuestionGeneratorSettingTab extends PluginSettingTab {
 			.setName(t("引用总预算(字)"))
 			.setDesc(t("单次提问最多带入的引用文本总量，超出按引用顺序截断；本地小模型建议调小"))
 			.addText(cb => cb.setValue(String(s.chatRefBudget)).onChange(v => { s.chatRefBudget = Math.max(0, parseInt(v) || 0); void this.plugin.saveSettings(); }));
+		new Setting(containerEl)
+			.setName(t("聊天检索范围"))
+			.setDesc(t("「整个 vault」会把任意文件夹中命中的笔记内容发送给已配置的 AI 接口，请注意隐私"))
+			.addDropdown(cb => {
+				cb.addOption("plugin", t("仅插件知识库")).addOption("vault", t("整个 vault"))
+					.setValue(s.chatSearchScope)
+					.onChange(v => { s.chatSearchScope = v === "vault" ? "vault" : "plugin"; void this.plugin.saveSettings(); });
+			});
 	}
 }

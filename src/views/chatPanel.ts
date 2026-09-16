@@ -1,11 +1,12 @@
 import { Notice, TFile, MarkdownView, MarkdownRenderer, setIcon, type Component } from "obsidian";
 
 import type QuestionGeneratorPlugin from "../main";
-import { CHAT_HISTORY_LIMIT, CHAT_RETRIEVE_LIMIT, AI_REQUEST_TIMEOUT_MS } from "../constants";
+import { CHAT_HISTORY_LIMIT, CHAT_RETRIEVE_LIMIT, AI_REQUEST_TIMEOUT_MS, CHAT_CANDIDATE_LIMIT, TOKEN_WARN_THRESHOLD } from "../constants";
 import type { ChatMessage, ChatSearchScope } from "../types";
 import { chatMessage } from "../services/llmService";
 import { getScopeFiles, retrieveContext, buildChatPrompt, rankCandidates, buildReferenceBlock, type RetrievedChunk } from "../services/chatService";
-import { CHAT_CANDIDATE_LIMIT } from "../constants";
+import { estimateTokens } from "../utils/text";
+import { NotePickerModal } from "./notePickerModal";
 import { t, tf } from "../i18n/index";
 
 interface ChatRef {
@@ -33,6 +34,8 @@ export class ChatPanel {
 	private references: ChatRef[] = [];
 	private aiCancelled = false;
 	private cancelWaiters: (() => void)[] = [];
+	private autoScroll = true;
+	private hasFocused = false;
 
 	constructor(plugin: QuestionGeneratorPlugin, container: HTMLElement, component: Component) {
 		this.plugin = plugin;
@@ -91,6 +94,11 @@ export class ChatPanel {
 
 		// ---- Messages ----
 		this.messagesEl = this.rootEl.createDiv({ cls: "qg-chat-messages" });
+		this.messagesEl.addEventListener("scroll", () => {
+			const el = this.messagesEl;
+			if (!el) return;
+			this.autoScroll = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+		});
 
 		// ---- Composer (pinned at bottom) ----
 		const composer = this.rootEl.createDiv({ cls: "qg-chat-composer" });
@@ -98,13 +106,16 @@ export class ChatPanel {
 		const wrap = composer.createDiv({ cls: "qg-chat-input-wrap" });
 		this.inputEl = wrap.createEl("textarea", { cls: "qg-chat-input", attr: { placeholder: t("向 AI 提问…"), rows: "1" } });
 		this.inputEl.addEventListener("keydown", (e) => {
-			if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void this.send(); }
+			if (e.key === "Enter" && (!e.shiftKey || e.ctrlKey || e.metaKey)) { e.preventDefault(); void this.send(); }
 		});
 
 		const bar = composer.createDiv({ cls: "qg-chat-composer-bar" });
 		const refBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("添加引用（当前笔记/选区）"), "aria-label": t("添加引用（当前笔记/选区）") } });
 		setIcon(refBtn, "text-quote");
 		refBtn.addEventListener("click", () => void this.addReference());
+		const refFileBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("从文件选择器添加引用"), "aria-label": t("从文件选择器添加引用") } });
+		setIcon(refFileBtn, "file-plus");
+		refFileBtn.addEventListener("click", () => this.pickFilesAsReferences());
 		bar.createDiv({ cls: "qg-chat-spacer" });
 		this.stopBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-stop", attr: { title: t("停止"), "aria-label": t("停止") } });
 		setIcon(this.stopBtn, "square");
@@ -116,6 +127,11 @@ export class ChatPanel {
 
 		this.renderRefs();
 		this.renderMessages();
+
+		if (!this.hasFocused) {
+			this.hasFocused = true;
+			window.setTimeout(() => this.inputEl?.focus(), 0);
+		}
 	}
 
 	private renderRefs() {
@@ -135,6 +151,11 @@ export class ChatPanel {
 		}
 	}
 
+	private scrollToBottom(force = false) {
+		if (!this.messagesEl) return;
+		if (force || this.autoScroll) this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+	}
+
 	renderMessages() {
 		if (!this.messagesEl) return;
 		this.messagesEl.empty();
@@ -145,19 +166,18 @@ export class ChatPanel {
 			empty.createDiv({ text: t("与我聊聊吧，我可以基于你的笔记回答问题。") });
 			return;
 		}
-		for (const m of history) {
-			this.appendBubble(m.role, m.content, []);
-		}
-		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+		history.forEach((m, i) => this.appendBubble(m.role, m.content, [], i));
+		this.scrollToBottom(true);
 	}
 
-	appendBubble(role: "user" | "assistant", content: string, sources: RetrievedChunk[]) {
+	appendBubble(role: "user" | "assistant", content: string, sources: RetrievedChunk[], historyIndex = -1) {
 		if (!this.messagesEl) return;
 		// 首次发送时移除居中的空状态占位，否则消息会被挤到底部
 		this.messagesEl.querySelector(".qg-chat-empty")?.remove();
 		const row = this.messagesEl.createDiv({ cls: "qg-chat-bubble-row " + (role === "user" ? "is-user" : "is-ai") });
 		const bubble = row.createDiv({ cls: "qg-chat-bubble " + (role === "user" ? "qg-chat-user" : "qg-chat-ai") });
 		if (role === "assistant") {
+			bubble.dataset.raw = content;
 			void MarkdownRenderer.render(this.app, content, bubble, this.app.workspace.getActiveFile()?.path || "", this.component);
 		} else {
 			bubble.setText(content);
@@ -168,7 +188,52 @@ export class ChatPanel {
 				srcRow.createSpan({ text: s.basename, cls: "qg-chat-source" }).addEventListener("click", () => this.jumpToFile(s.path));
 			}
 		}
-		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+		const actions = row.createDiv({ cls: "qg-chat-actions" });
+		const copyBtn = actions.createEl("button", { cls: "qg-chat-mini-btn", attr: { title: t("复制"), "aria-label": t("复制") } });
+		setIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => void this.copyText(content));
+		if (role === "assistant" && historyIndex >= 0) {
+			const reBtn = actions.createEl("button", { cls: "qg-chat-mini-btn", attr: { title: t("重新生成"), "aria-label": t("重新生成") } });
+			setIcon(reBtn, "rotate-ccw");
+			reBtn.addEventListener("click", () => this.regenerate(historyIndex));
+		}
+		this.scrollToBottom();
+	}
+
+	private appendError(message: string) {
+		if (!this.messagesEl) return;
+		this.messagesEl.querySelector(".qg-chat-empty")?.remove();
+		const row = this.messagesEl.createDiv({ cls: "qg-chat-bubble-row is-ai" });
+		row.createDiv({ cls: "qg-chat-error", text: t("请求失败") + "：" + message });
+		this.scrollToBottom();
+	}
+
+	private appendWarn(message: string) {
+		if (!this.messagesEl) return;
+		const row = this.messagesEl.createDiv({ cls: "qg-chat-bubble-row is-ai" });
+		row.createDiv({ cls: "qg-chat-warn", text: message });
+		this.scrollToBottom();
+	}
+
+	async copyText(content: string) {
+		try {
+			await navigator.clipboard.writeText(content);
+			new Notice(t("已复制"));
+		} catch { /* clipboard unavailable */ }
+	}
+
+	regenerate(index: number) {
+		const history = this.plugin.settings.chatHistory || [];
+		let j = index;
+		while (j >= 0 && history[j]?.role !== "user") j--;
+		if (j < 0) return;
+		const userText = history[j]!.content;
+		this.plugin.settings.chatHistory = history.slice(0, j);
+		void this.plugin.saveSettings();
+		this.renderMessages();
+		if (!this.inputEl) return;
+		this.inputEl.value = userText;
+		void this.send();
 	}
 
 	private getActiveMarkdownView(): MarkdownView | null {
@@ -218,6 +283,27 @@ export class ChatPanel {
 		new Notice(tf("已引用 {name}", { name: ref.name }) + (ref.isSelection ? t("（选中）") : ""));
 	}
 
+	private pickFilesAsReferences() {
+		new NotePickerModal(this.app, (files) => void this.addFilesAsReferences(files)).open();
+	}
+
+	private async addFilesAsReferences(files: TFile[]) {
+		let added = 0;
+		for (const f of files) {
+			if (this.references.length >= MAX_REFS) { new Notice(tf("最多引用 {n} 个文件", { n: MAX_REFS })); break; }
+			const key = f.path + "|doc";
+			if (this.references.some(r => r.key === key)) continue;
+			try {
+				const text = (await this.app.vault.cachedRead(f)).trim().slice(0, REF_CHARS);
+				if (!text) continue;
+				this.references.push({ key, name: f.basename, path: f.path, text, isSelection: false });
+				added++;
+			} catch { /* skip */ }
+		}
+		this.renderRefs();
+		if (added > 0) new Notice(tf("已引用 {n} 篇笔记", { n: added }));
+	}
+
 	jumpToFile(path: string) {
 		try {
 			const file = this.app.vault.getAbstractFileByPath(path);
@@ -262,6 +348,8 @@ export class ChatPanel {
 		if (this.sendBtn) this.sendBtn.disabled = true;
 		this.appendBubble("user", text, []);
 		this.inputEl.value = "";
+		this.autoScroll = true;
+		this.scrollToBottom(true);
 		this.stopBtn?.show();
 		this.resetAI();
 
@@ -285,16 +373,17 @@ export class ChatPanel {
 			// 发送后自动清空引用
 			if (this.references.length) { this.references = []; this.renderRefs(); }
 
+			const est = estimateTokens(system + text);
+			if (est > TOKEN_WARN_THRESHOLD) this.appendWarn(tf("本次请求约 {n} tokens，可能超出模型上下文，建议减小引用预算或缩小检索范围", { n: est }));
+
 			const assistantReply = await this.requestChat(messages, system);
 			if (this.aiCancelled) return;
 			history.push({ role: "assistant", content: assistantReply });
 			this.plugin.settings.chatHistory = history;
 			void this.plugin.saveSettings();
-			this.appendBubble("assistant", assistantReply, chunks);
+			this.appendBubble("assistant", assistantReply, chunks, history.length - 1);
 		} catch (err) {
-			if (!this.aiCancelled) {
-				new Notice(t("AI 调用失败") + ": " + ((err as Error).message || String(err)));
-			}
+			if (!this.aiCancelled) this.appendError((err as Error).message || String(err));
 		} finally {
 			this.stopBtn?.hide();
 			if (this.sendBtn) this.sendBtn.disabled = false;

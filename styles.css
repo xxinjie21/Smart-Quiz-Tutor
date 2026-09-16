@@ -226,7 +226,7 @@
 }
 
 /* ---------- Generic buttons: pill-shaped, soft ---------- */
-.question-generator-sidebar button:not(.qg-chat-icon-btn) {
+.question-generator-sidebar button:not(.qg-chat-icon-btn):not(.qg-chat-mini-btn) {
 	border-radius: var(--qg-radius-sm) !important;
 	border: 1px solid var(--qg-border) !important;
 	background: var(--qg-surface-2) !important;
@@ -236,7 +236,7 @@
 	cursor: pointer !important;
 }
 
-.question-generator-sidebar button:not(.qg-chat-icon-btn):hover {
+.question-generator-sidebar button:not(.qg-chat-icon-btn):not(.qg-chat-mini-btn):hover {
 	background: var(--qg-surface-3) !important;
 	box-shadow: var(--qg-shadow-1) !important;
 }
@@ -541,6 +541,52 @@ button.qg-interval-active:hover,
 	cursor: pointer;
 }
 .qg-chat-source:hover { color: var(--interactive-accent); border-color: var(--interactive-accent); }
+
+/* Per-message actions (copy / regenerate) */
+.qg-chat-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+.qg-chat-bubble-row:hover .qg-chat-actions { opacity: 1; }
+.qg-chat-bubble-row.is-user .qg-chat-actions { justify-content: flex-end; }
+.qg-chat-mini-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0 !important;
+	border: none !important;
+	border-radius: 6px !important;
+	background: transparent !important;
+	color: var(--text-faint) !important;
+	box-shadow: none !important;
+	cursor: pointer !important;
+}
+.qg-chat-mini-btn:hover {
+	background: var(--qg-surface-3, var(--background-modifier-hover)) !important;
+	color: var(--text-normal) !important;
+}
+.qg-chat-mini-btn svg { width: 14px; height: 14px; }
+
+/* Inline error / warning bubbles */
+.qg-chat-error {
+	max-width: 92%;
+	padding: 8px 12px;
+	border-radius: var(--qg-radius-md, 12px);
+	font-size: 13px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+	background: color-mix(in srgb, var(--color-red, #e5534b) 14%, var(--background-secondary));
+	border: 1px solid color-mix(in srgb, var(--color-red, #e5534b) 40%, transparent);
+	color: var(--text-normal);
+}
+.qg-chat-warn {
+	max-width: 92%;
+	padding: 6px 10px;
+	border-radius: var(--qg-radius-sm, 8px);
+	font-size: 12px;
+	background: color-mix(in srgb, var(--color-orange, #d29922) 14%, var(--background-secondary));
+	border: 1px solid color-mix(in srgb, var(--color-orange, #d29922) 35%, transparent);
+	color: var(--text-muted);
+}
 
 /* ---- Composer (pinned) ---- */
 .qg-chat-composer {
