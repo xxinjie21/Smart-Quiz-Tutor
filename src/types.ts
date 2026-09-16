@@ -32,6 +32,13 @@ export interface WrongAnswerNote {
 
 export type QuestionType = "single" | "multi" | "judge" | "blank" | "essay";
 
+export interface ChatMessage {
+	role: "user" | "assistant";
+	content: string;
+}
+
+export type ChatSearchScope = "plugin" | "vault";
+
 export interface ParsedQuestion {
 	number: number;
 	type: QuestionType;
@@ -69,6 +76,9 @@ export interface PluginSettings {
 	noteViewFolder: string;
 	knowledgeFolder: string;
 	language: "zh" | "en";
+	chatHistory: ChatMessage[];
+	chatSearchScope: ChatSearchScope;
+	chatRefBudget: number;
 }
 
 export interface TreeNode {

@@ -27,10 +27,12 @@ import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult, mer
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 import { buildNotePrompt, parseNoteResult, buildNoteFrontmatter, type NoteGenSourceType } from "../services/noteService";
 import { t, tf, getLanguage, setLanguage } from "../i18n/index";
+import { ChatPanel } from "./chatPanel";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
-	activeSection: "home" | "questions" | "notes" | "wrong" | "review" | "settings" = "home";
+	activeSection: "home" | "questions" | "notes" | "wrong" | "review" | "chat" | "settings" = "home";
+	private chatPanel: ChatPanel | null = null;
 	innerContentEl: HTMLDivElement | null = null;
 	navButtons: Map<string, HTMLDivElement> = new Map();
 	navEl: HTMLElement | null = null;
@@ -130,6 +132,8 @@ export class MainSidebarView extends ItemView {
 	async onClose() {
 		if (this._refreshHandler) { this.plugin.offDataChanged(this._refreshHandler); this._refreshHandler = null; }
 		this.cancelAI();
+		this.chatPanel?.destroy();
+		this.chatPanel = null;
 		this.genIsGenerating = false;
 		this.innerContentEl = null;
 		this.navEl = null;
@@ -148,12 +152,13 @@ export class MainSidebarView extends ItemView {
 			header.createDiv({ text: t("智学助手"), attr: { style: "font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
 
 			const nav = container.createDiv({ cls: "qg-nav", attr: { style: "display:flex;margin:0 14px 12px;" } });
-			const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "settings"; label: string; icon: string }[] = [
+			const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "chat" | "settings"; label: string; icon: string }[] = [
 				{ key: "home", label: t("首页"), icon: "🏠" },
 				{ key: "questions", label: t("题目"), icon: "📝" },
 				{ key: "notes", label: t("笔记"), icon: "📋" },
 				{ key: "wrong", label: t("错题"), icon: "❌" },
 				{ key: "review", label: t("复习"), icon: "📊" },
+				{ key: "chat", label: t("AI"), icon: "💬" },
 				{ key: "settings", label: t("设置"), icon: "⚙️" },
 			];
 			this.navButtons.clear();
@@ -170,7 +175,7 @@ export class MainSidebarView extends ItemView {
 			}
 			this.navIndicatorEl = nav.createDiv({ cls: "qg-nav-indicator" });
 			this.navEl = nav;
-			this.innerContentEl = container.createDiv({ attr: { style: "flex:1;overflow-y:auto;padding:0 14px 14px;" } });
+			this.innerContentEl = container.createDiv({ cls: "qg-inner" });
 		} else {
 			this.innerContentEl?.empty();
 		}
@@ -186,12 +191,15 @@ export class MainSidebarView extends ItemView {
 			this.navIndicatorEl.style.transform = `translateX(${activeBtn.offsetLeft - 3}px)`;
 		}
 
+		this.innerContentEl?.toggleClass("qg-inner-chat", this.activeSection === "chat");
+
 		switch (this.activeSection) {
 			case "home": await this.renderHomeTab(); break;
 			case "questions": await this.renderQuestionsTab(); break;
 			case "notes": await this.renderNotesTab(); break;
 			case "wrong": await this.renderWrongTab(); break;
 			case "review": await this.renderReviewTab(); break;
+			case "chat": this.renderChatTab(); break;
 			case "settings": this.renderSettingsTab(); break;
 		}
 
@@ -203,6 +211,17 @@ export class MainSidebarView extends ItemView {
 			[{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "translateY(0)" }],
 			{ duration: 250, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
 		);
+	}
+
+	// ===================== AI CHAT TAB =====================
+	renderChatTab() {
+		if (!this.innerContentEl) return;
+		if (!this.chatPanel) {
+			this.chatPanel = new ChatPanel(this.plugin, this.innerContentEl, this);
+		} else {
+			this.innerContentEl.appendChild(this.chatPanel.rootEl);
+			this.chatPanel.renderMessages();
+		}
 	}
 
 	// ===================== HOME TAB =====================
@@ -434,6 +453,7 @@ export class MainSidebarView extends ItemView {
 		actSection.createDiv({ text: t("快捷操作"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 
 		const actions = [
+			{ label: t("💬 AI 助手"), desc: t("基于你的笔记知识库进行问答"), action: () => { void this.plugin.activateChat(); } },
 			{ label: t("📝 选择文件生成题目"), desc: t("让AI根据文档内容创作新题目存入题库"), action: () => this.openGeneratePicker() },
 			{ label: t("🎯 薄弱点生成题目"), desc: t("针对薄弱知识点"), badge: stats.weakCount > 0 ? String(stats.weakCount) : undefined, action: async () => { await this.generateFromWeakPoints(); } },
 			{ label: t("📋 AI识别试卷"), desc: t("提取文档中已有题目，保存后直接答题"), action: () => { this.homeView = "examBrowser"; void this.renderHomeTab(); } },
@@ -482,7 +502,13 @@ export class MainSidebarView extends ItemView {
 		const rebuildInfo = rebuildRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
 		rebuildInfo.createDiv({ text: t("🔄 重建知识点索引"), cls: "qg-action-label" });
 		rebuildInfo.createDiv({ text: t("扫描各文件夹的标签，重新生成关联的知识点索引文件"), cls: "qg-action-desc" });
-		rebuildRow.addEventListener("click", () => { void (async () => { await this.plugin.rebuildKnowledgeIndex(); new Notice(t("知识点索引已重建")); })(); });
+		rebuildRow.addEventListener("click", () => { void (async () => {
+			const report = await this.plugin.rebuildKnowledgeIndex();
+			const extra: string[] = [];
+			if (report.brokenLinks > 0) extra.push(tf("失效链接 {n} 处", { n: report.brokenLinks }));
+			if (report.duplicates > 0) extra.push(tf("疑似重复文件 {n} 组", { n: report.duplicates }));
+			new Notice(extra.length > 0 ? t("知识点索引已重建") + "：" + extra.join("，") : t("知识点索引已重建"));
+		})(); });
 		const cacheRow = toolsSection.createDiv({ cls: "qg-action-row" });
 		const cacheInfo = cacheRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
 		cacheInfo.createDiv({ text: t("🧹 清除缓存"), cls: "qg-action-label" });

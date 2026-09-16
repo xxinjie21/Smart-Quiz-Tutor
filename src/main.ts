@@ -3,7 +3,7 @@ import { Document, Packer } from "docx";
 import * as fs from "fs";
 import * as path from "path";
 
-import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, WRONG_NOTES_CACHE_TTL_MS } from "./constants";
+import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, CHAT_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, WRONG_NOTES_CACHE_TTL_MS } from "./constants";
 import type { HistoryEntry, WrongAnswerNote, PluginSettings } from "./types";
 import { parseFM, buildFM } from "./utils/frontmatter";
 import { isAbs, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, EXAM_SOURCE_EXTS, isExcludedPath, joinPath } from "./utils/fs-utils";
@@ -14,6 +14,7 @@ import { buildWordParagraphs, exportPdfDirect } from "./utils/exporter";
 import { getElectronRemote } from "./utils/electron";
 import { KnowledgeService, type IndexSource } from "./services/knowledgeService";
 import { MainSidebarView } from "./views/sidebarView";
+import { ChatView } from "./views/chatView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
 import { setLanguage } from "./i18n/index";
 
@@ -247,6 +248,12 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		return null;
 	}
 
+	async activateChat(): Promise<MainSidebarView | null> {
+		const view = await this.activateSidebar();
+		if (view) { view.activeSection = "chat"; await view.render(); }
+		return view;
+	}
+
 	async onload() {
 		await this.loadSettings();
 
@@ -263,6 +270,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}
 
 		this.registerView(SIDEBAR_VIEW_TYPE, (leaf) => new MainSidebarView(leaf, this));
+		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
 		this.addSettingTab(new QuestionGeneratorSettingTab(this.app, this));
 
 		this.addRibbonIcon("pencil", "智学助手", async () => {
@@ -285,6 +293,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					await leaf.setViewState({ type: SIDEBAR_VIEW_TYPE, active: true });
 				}
 			}
+			// AI 对话已内嵌到智学助手侧边栏，关闭旧的独立对话标签页
+			for (const chatLeaf of this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)) chatLeaf.detach();
 			void (async () => {
 				try {
 					await this.migrateOldWrongAnswers();
@@ -321,7 +331,13 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			const view = await this.activateSidebar();
 			if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
 		}});
-		this.addCommand({ id: "rebuild-knowledge-index", name: "重建知识点索引", callback: async () => { await this.rebuildKnowledgeIndex(); new Notice("知识点索引已重建"); } });
+		this.addCommand({ id: "rebuild-knowledge-index", name: "重建知识点索引", callback: async () => {
+			const report = await this.rebuildKnowledgeIndex();
+			const extra: string[] = [];
+			if (report.brokenLinks > 0) extra.push("失效链接 " + report.brokenLinks + " 处");
+			if (report.duplicates > 0) extra.push("疑似重复文件 " + report.duplicates + " 组");
+			new Notice(extra.length > 0 ? "知识点索引已重建：" + extra.join("，") : "知识点索引已重建");
+		} });
 		this.addCommand({
 			id: "generate-from-current",
 			name: "基于当前文档生成试题",
@@ -419,12 +435,14 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	onunload() {
 		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 		for (const leaf of leaves) { leaf.detach(); }
+		const chatLeaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
+		for (const leaf of chatLeaves) { leaf.detach(); }
 	}
 }
 
 // ===================== 公共导出（保持向后兼容） =====================
 export { t, tf, setLanguage, getLanguage, zh, en } from "./i18n/index";
-export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE } from "./constants";
+export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE, CHAT_VIEW_TYPE } from "./constants";
 export { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
 export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
 export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, htmlEscape } from "./utils/text";
@@ -436,10 +454,12 @@ export { buildFileTree } from "./utils/filetree";
 export { stripAnswerSummarySection, splitSemantic, normalizeAnswerSteps, splitAnswerContent, fixSequentialNumbers, normalizeExamContent, highlightTechTerms, highlightTechHtml } from "./utils/layout";
 export { buildWordParagraphs, buildExportHtml, parseExamBlocks, exportPdfDirect } from "./utils/exporter";
 export { getElectronRemote } from "./utils/electron";
-export { chatLLM } from "./services/llmService";
+export { chatLLM, chatMessage } from "./services/llmService";
+export { getScopeFiles, retrieveContext, buildChatPrompt } from "./services/chatService";
 export { buildExamExtractPrompt, buildGeneratePrompt, parseTypeSpec, parseAITagsFromResult, mergeExamChunks } from "./services/questionService";
 export { KnowledgeService, buildTaggingPrompt, parseTaggedResult } from "./services/knowledgeService";
 export { convertDocumentToText, stripRtf, htmlToMarkdown } from "./services/documentService";
-export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource } from "./types";
+export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource, ChatMessage, ChatSearchScope } from "./types";
 export { MainSidebarView } from "./views/sidebarView";
+export { ChatView } from "./views/chatView";
 export { QuestionGeneratorSettingTab } from "./views/settingTab";

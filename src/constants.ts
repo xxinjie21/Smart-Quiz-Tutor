@@ -28,6 +28,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	noteViewFolder: "笔记",
 	knowledgeFolder: "知识点",
 	language: "zh",
+	chatHistory: [],
+	chatSearchScope: "plugin",
+	chatRefBudget: 60000,
 };
 
 export const SYSTEM_TAGS = ["错题", "题目", "笔记"];
@@ -57,6 +60,10 @@ export const INTERVAL_PRESETS: Record<string, IntervalPreset[]> = {
 };
 
 export const SIDEBAR_VIEW_TYPE = "question-generator-sidebar";
+export const CHAT_VIEW_TYPE = "question-generator-chat";
+
+export const CHAT_HISTORY_LIMIT = 50;
+export const CHAT_RETRIEVE_LIMIT = 5;
 
 export const MAX_EXAM_CHUNK_CHARS = 15000;
 export const EXAM_CHUNK_OVERLAP = 2000;

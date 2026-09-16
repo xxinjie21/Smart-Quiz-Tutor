@@ -140,5 +140,12 @@ export class QuestionGeneratorSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName(t("启动时提醒复习"))
 			.addToggle(cb => cb.setValue(s.autoReviewReminder).onChange(v => { s.autoReviewReminder = v; void this.plugin.saveSettings(); }));
+
+		// --- AI 助手 ---
+		new Setting(containerEl).setName(t("AI 助手")).setHeading();
+		new Setting(containerEl)
+			.setName(t("引用总预算(字)"))
+			.setDesc(t("单次提问最多带入的引用文本总量，超出按引用顺序截断；本地小模型建议调小"))
+			.addText(cb => cb.setValue(String(s.chatRefBudget)).onChange(v => { s.chatRefBudget = Math.max(0, parseInt(v) || 0); void this.plugin.saveSettings(); }));
 	}
 }

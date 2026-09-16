@@ -104,7 +104,7 @@ export class KnowledgeService {
 		}
 	}
 
-	async rebuildKnowledgeIndex() {
+	async rebuildKnowledgeIndex(): Promise<{ brokenLinks: number; duplicates: number }> {
 		const tagMap: Record<string, Record<IndexSource, { label: string; path: string }[]>> = {};
 		const addLink = (tag: string, src: IndexSource, label: string, p: string) => {
 			const arr = (tagMap[tag] || (tagMap[tag] = { 题目: [], 笔记: [], 错题: [] }))[src];
@@ -163,6 +163,67 @@ export class KnowledgeService {
 			}
 			await this.removeStaleTagFiles(kf, Object.keys(tagMap));
 		}
+		return this.scanHealth();
+	}
+
+	/** 健康扫描：统计插件目录内的失效链接数与疑似重复文件组数（只报告，不修改正文）。 */
+	private async scanHealth(): Promise<{ brokenLinks: number; duplicates: number }> {
+		const folders = [
+			this.p.rootPath(this.p.settings.questionFolder),
+			this.p.rootPath(this.p.settings.wrongBookFolder),
+			this.p.rootPath(this.p.settings.noteViewFolder),
+		].filter(Boolean);
+		const kf = this.p.rootPath(this.p.settings.knowledgeFolder);
+		if (kf) folders.push(kf);
+
+		const mdFiles: { path: string; basename: string; content: string }[] = [];
+		for (const folder of folders) {
+			try {
+				if (isAbs(folder)) {
+					if (!fs.existsSync(folder)) continue;
+					for (const f of listMdFilesRecursive(folder)) {
+						try { mdFiles.push({ path: f.replace(/\\/g, "/"), basename: path.basename(f).replace(/\.md$/, ""), content: readFileStr(f) }); } catch { /* skip */ }
+					}
+				} else {
+					const prefix = folder.endsWith("/") ? folder : folder + "/";
+					const allMd = (this.p.app.vault as { getMarkdownFiles?: () => { path: string }[] }).getMarkdownFiles;
+					const mdList = typeof allMd === "function" ? allMd.call(this.p.app.vault) : [];
+					for (const f of mdList) {
+						if (f.path.startsWith(prefix)) {
+							try { mdFiles.push({ path: f.path, basename: (f as unknown as { basename: string }).basename, content: await this.p.app.vault.cachedRead(f as TFile) }); } catch { /* skip */ }
+						}
+					}
+				}
+			} catch { /* skip */ }
+		}
+
+		const knownBasenames = new Set<string>();
+		const vaultMd = (this.p.app.vault as { getMarkdownFiles?: () => { basename: string }[] }).getMarkdownFiles;
+		const vaultFiles = typeof vaultMd === "function" ? vaultMd.call(this.p.app.vault) : [];
+		for (const f of vaultFiles) knownBasenames.add(f.basename);
+
+		let brokenLinks = 0;
+		for (const f of mdFiles) {
+			const links = f.content.match(/\[\[([^\]|#]+)(?:\||#)[^\]]*\]\]|\[\[([^\]|#]+)\]\]/g) || [];
+			for (const raw of links) {
+				let target = "";
+				const m = raw.match(/\[\[([^\]|#|]+)(?:[|#])/);
+				if (m) target = m[1]!;
+				else { const m2 = raw.match(/\[\[([^\]]+?)\]\]/); if (m2) target = m2[1]!; }
+				if (!target || target.trim() === "") continue;
+				const base = target.split("/").pop()!.trim();
+				if (!knownBasenames.has(base) && !knownBasenames.has(target.trim())) brokenLinks++;
+			}
+		}
+
+		const seen = new Map<string, number>();
+		for (const f of mdFiles) {
+			seen.set(f.basename, (seen.get(f.basename) || 0) + 1);
+		}
+		let duplicates = 0;
+		for (const [, cnt] of seen) { if (cnt >= 2) duplicates++; }
+
+		return { brokenLinks, duplicates };
 	}
 
 	private async removeStaleTagFiles(folder: string, keepTags: string[]) {
