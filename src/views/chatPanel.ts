@@ -4,7 +4,8 @@ import type QuestionGeneratorPlugin from "../main";
 import { CHAT_HISTORY_LIMIT, CHAT_RETRIEVE_LIMIT, AI_REQUEST_TIMEOUT_MS } from "../constants";
 import type { ChatMessage, ChatSearchScope } from "../types";
 import { chatMessage } from "../services/llmService";
-import { getScopeFiles, retrieveContext, buildChatPrompt, type RetrievedChunk } from "../services/chatService";
+import { getScopeFiles, retrieveContext, buildChatPrompt, rankCandidates, buildReferenceBlock, type RetrievedChunk } from "../services/chatService";
+import { CHAT_CANDIDATE_LIMIT } from "../constants";
 import { t, tf } from "../i18n/index";
 
 interface ChatRef {
@@ -227,7 +228,7 @@ export class ChatPanel {
 		else new Notice(t("找不到文件") + ": " + path);
 	}
 
-	async collectCandidates(scope: ChatSearchScope): Promise<{ files: { path: string; basename: string }[]; contents: Record<string, string> }> {
+	async collectCandidates(scope: ChatSearchScope, query: string): Promise<{ files: { path: string; basename: string }[]; contents: Record<string, string> }> {
 		const pluginSettings = this.plugin.settings;
 		const all = this.app.vault.getMarkdownFiles();
 		const pluginDirs: string[] = [];
@@ -243,7 +244,7 @@ export class ChatPanel {
 			base.push(...all.filter(f => dirs.some(p => f.path.startsWith(p.endsWith("/") ? p : p + "/"))).map(f => ({ path: f.path, basename: f.basename })));
 		}
 		const files = getScopeFiles(base, scope, pluginDirs);
-		const capped = files.slice(0, 300);
+		const capped = rankCandidates(query, files, CHAT_CANDIDATE_LIMIT);
 		const contents: Record<string, string> = {};
 		for (const f of capped) {
 			try {
@@ -252,24 +253,6 @@ export class ChatPanel {
 			} catch { /* skip */ }
 		}
 		return { files: capped, contents };
-	}
-
-	/** 按总预算拼接全部引用文本，超出部分按引用顺序截断。 */
-	private buildRefBlock(): string {
-		if (this.references.length === 0) return "";
-		const budget = this.plugin.settings.chatRefBudget ?? 60000;
-		let used = 0;
-		const parts: string[] = [];
-		for (const ref of this.references) {
-			const header = `【${ref.name}${ref.isSelection ? "（选中片段）" : ""}】\n`;
-			const remaining = budget - used - header.length;
-			if (remaining <= 0) break;
-			const body = ref.text.slice(0, remaining);
-			parts.push(header + body);
-			used += header.length + body.length;
-		}
-		if (parts.length === 0) return "";
-		return "【引用文件】\n" + parts.join("\n\n") + "\n\n回答请优先依据以上引用文件的内容与思想。\n\n";
 	}
 
 	async send() {
@@ -288,13 +271,13 @@ export class ChatPanel {
 
 		try {
 			const scope = this.plugin.settings.chatSearchScope || "plugin";
-			const { files, contents } = await this.collectCandidates(scope);
+			const { files, contents } = await this.collectCandidates(scope, text);
 			if (this.aiCancelled) return;
 			const chunks = retrieveContext(text, files, contents, CHAT_RETRIEVE_LIMIT);
 			const prompt = buildChatPrompt(text, chunks, scope);
 
 			const messages: ChatMessage[] = history.slice(-10).map(m => ({ role: m.role, content: m.content }));
-			const refBlock = this.buildRefBlock();
+			const refBlock = buildReferenceBlock(this.references, this.plugin.settings.chatRefBudget ?? 60000);
 			const hasContext = chunks.length > 0 || this.references.length > 0;
 			const system = hasContext
 				? "你是智学助手，一个帮助用户基于 Obsidian 笔记学习与复习的 AI 助手。回答要依据提供的参考资料，并在关键信息后标注来源。\n\n" + refBlock + prompt

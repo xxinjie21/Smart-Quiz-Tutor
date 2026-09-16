@@ -456,7 +456,8 @@ export { stripAnswerSummarySection, splitSemantic, normalizeAnswerSteps, splitAn
 export { buildWordParagraphs, buildExportHtml, parseExamBlocks, exportPdfDirect } from "./utils/exporter";
 export { getElectronRemote } from "./utils/electron";
 export { chatLLM, chatMessage } from "./services/llmService";
-export { getScopeFiles, retrieveContext, buildChatPrompt } from "./services/chatService";
+export { getScopeFiles, retrieveContext, buildChatPrompt, tokenize, rankCandidates, buildReferenceBlock } from "./services/chatService";
+export { pruneHistory } from "./utils/history";
 export { buildExamExtractPrompt, buildGeneratePrompt, parseTypeSpec, parseAITagsFromResult, mergeExamChunks } from "./services/questionService";
 export { KnowledgeService, buildTaggingPrompt, parseTaggedResult } from "./services/knowledgeService";
 export { convertDocumentToText, stripRtf, htmlToMarkdown } from "./services/documentService";

@@ -64,6 +64,10 @@ export const CHAT_VIEW_TYPE = "question-generator-chat";
 
 export const CHAT_HISTORY_LIMIT = 50;
 export const CHAT_RETRIEVE_LIMIT = 5;
+export const CHAT_CANDIDATE_LIMIT = 60;
+
+export const HISTORY_LIMIT = 100;
+export const HISTORY_RESULT_CHARS = 2000;
 
 export const MAX_EXAM_CHUNK_CHARS = 15000;
 export const EXAM_CHUNK_OVERLAP = 2000;

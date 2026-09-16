@@ -37,6 +37,7 @@ export function extractKnowledgeTags(sourceName: string, questionText: string): 
 		const term = m[0];
 		if (term.length < 2) continue;
 		if (CN_STOP.has(term)) continue;
+		if (CH_NUM.test(term)) continue;
 		if (SYSTEM_TAGS.includes(term)) continue;
 		if (STOP_WORDS.has(term)) continue;
 		if (/^(答案|解析|题目|试题|题干|选项|标准|参考|正确|错误|以上|以下|关于|下列|其中|不正确|单选|多选|判断|填空|简答)$/.test(term)) continue;
