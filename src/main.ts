@@ -133,16 +133,21 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		try {
-			if (this.settings.rootFolder) await ensureFolder(this.app, this.settings.rootFolder);
-			await ensureFolder(this.app, this.rootPath(this.settings.questionFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.wrongBookFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.noteViewFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.extractedExamFolder));
-			await ensureFolder(this.app, this.rootPath(this.settings.knowledgeFolder));
-			if (this.settings.convertedMdFolder) await ensureFolder(this.app, this.rootPath(this.settings.convertedMdFolder));
-		} catch (err) {
-			logError("启动初始化错误", err);
+		const initFolders = [
+			this.settings.rootFolder,
+			this.rootPath(this.settings.questionFolder),
+			this.rootPath(this.settings.wrongBookFolder),
+			this.rootPath(this.settings.noteViewFolder),
+			this.rootPath(this.settings.extractedExamFolder),
+			this.rootPath(this.settings.knowledgeFolder),
+			this.settings.convertedMdFolder ? this.rootPath(this.settings.convertedMdFolder) : "",
+		];
+		for (const folder of initFolders) {
+			try {
+				await ensureFolder(this.app, folder);
+			} catch (err) {
+				logError("ensure folder failed: " + folder, err);
+			}
 		}
 
 		this.registerView(SIDEBAR_VIEW_TYPE, (leaf) => new MainSidebarView(leaf, this));

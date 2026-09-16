@@ -85,12 +85,34 @@ export function deleteFileAbs(filePath: string) {
 	if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+async function vaultPathExists(app: App, p: string): Promise<boolean> {
+	try { return await app.vault.adapter.exists(p); } catch { return false; }
+}
+
+/**
+ * 幂等地确保文件夹存在：
+ * - 相对路径按 `/` 逐级创建（父目录缺失也能补齐）；
+ * - 存在性同时参考 vault 索引与文件系统真值（onload 早期索引可能未就绪）；
+ * - 吞掉 "already exists" 类错误，其余再抛出。
+ */
 export async function ensureFolder(app: App, folderPath: string) {
+	if (!folderPath) return;
 	if (isAbs(folderPath)) {
 		ensureFolderAbs(folderPath);
-	} else {
-		if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
-			await app.vault.createFolder(folderPath);
+		return;
+	}
+	const parts = folderPath.split("/").filter(Boolean);
+	let cur = "";
+	for (const part of parts) {
+		cur = cur ? cur + "/" + part : part;
+		if (app.vault.getAbstractFileByPath(cur)) continue;
+		if (await vaultPathExists(app, cur)) continue;
+		try {
+			await app.vault.createFolder(cur);
+		} catch (err) {
+			if (await vaultPathExists(app, cur)) continue;
+			if (/already exists/i.test(String((err as Error)?.message ?? err))) continue;
+			throw err;
 		}
 	}
 }
