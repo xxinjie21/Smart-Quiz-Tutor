@@ -35,7 +35,7 @@ export async function renderWrongList(view: MainSidebarView) {
 		statsRow.createSpan({ text: tf("{label} {n}", { label: t("错题"), n: notes.length }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-red) 15%, transparent);color:var(--color-red);font-weight:600;" } });
 		statsRow.createSpan({ text: tf("{label} {n}", { label: t("待复习"), n: dueNotes.length }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-orange) 15%, transparent);color:var(--color-orange);font-weight:600;" } });
 
-		const modeBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
+		const modeBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 		const sortModes: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
 			{ key: "default", label: t("默认") },
 			{ key: "source", label: t("按源文件") },
@@ -86,7 +86,7 @@ export async function renderWrongList(view: MainSidebarView) {
 			}
 			const sortedSources = Object.entries(sourceGroups).sort((a, b) => b[1].length - a[1].length);
 			for (const [src, srcNotes] of sortedSources) {
-				const group = listEl.createDiv({ attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
+				const group = listEl.createDiv({ cls: "qg-clip", attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
 				const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 				const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 				header.createSpan({ text: src, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });
@@ -113,7 +113,7 @@ export async function renderWrongList(view: MainSidebarView) {
 			}
 			const sortedTags = Object.entries(tagGroups).sort((a, b) => b[1].length - a[1].length);
 			for (const [tag, tagNotes] of sortedTags) {
-				const group = listEl.createDiv({ attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
+				const group = listEl.createDiv({ cls: "qg-clip", attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
 				const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 				const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 				header.createSpan({ text: "#" + tag, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });
@@ -136,7 +136,7 @@ export async function renderWrongList(view: MainSidebarView) {
 }
 
 export function renderWrongNoteItem(view: MainSidebarView, container: HTMLDivElement, note: WrongAnswerNote) {
-		const item = container.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;cursor:pointer;transition:background 0.15s;" } });
+		const item = container.createDiv({ cls: "qg-list-card", attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;cursor:pointer;transition:background 0.15s;" } });
 		const cb = item.createEl("input", { attr: { type: "checkbox", style: "flex-shrink:0;width:14px;height:14px;cursor:pointer;" } });
 		cb.checked = view.adminSelected.has(note.filePath);
 		cb.addEventListener("change", (e) => {

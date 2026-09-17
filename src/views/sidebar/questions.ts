@@ -64,7 +64,7 @@ export async function renderQuestionsTab(view: MainSidebarView) {
 		statsRow.createSpan({ text: tf("{label} {n}", { label: t("题目"), n: files.length }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--interactive-accent) 15%, transparent);color:var(--interactive-accent);font-weight:600;" } });
 		statsRow.createSpan({ text: tf("{label} {n}", { label: t("知识点"), n: allTags.size }), attr: { style: "padding:3px 8px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);font-weight:600;" } });
 
-		const sortBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
+		const sortBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 		const sortModes: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
 			{ key: "default", label: t("默认") },
 			{ key: "source", label: t("按源文件") },
@@ -110,7 +110,7 @@ export async function renderQuestionsTab(view: MainSidebarView) {
 				item.createSpan({ text: Math.round(file.stat.size / 1024) + "KB", attr: { style: "font-size:16px;color:var(--text-muted);flex-shrink:0;" } });
 				const d = new Date(file.stat.mtime);
 				item.createSpan({ text: (d.getMonth() + 1) + "/" + d.getDate(), attr: { style: "font-size:16px;color:var(--text-muted);flex-shrink:0;" } });
-				const actRow = item.createDiv({ attr: { style: "display:flex;gap:2px;flex-shrink:0;" } });
+				const actRow = item.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;flex-shrink:0;" } });
 				const actBtn = (label: string, tip: string, cb: () => void) => {
 					const b = actRow.createSpan({ text: label, attr: { title: tip, style: "padding:1px 4px;border-radius:3px;cursor:pointer;font-size:16px;" } });
 					b.addEventListener("click", (e) => { e.stopPropagation(); cb(); });
@@ -194,7 +194,7 @@ export async function renderQuestionsTab(view: MainSidebarView) {
 				}
 				const sorted = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
 				for (const [src, srcFiles] of sorted) {
-					const group = listEl.createDiv({ attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
+					const group = listEl.createDiv({ cls: "qg-clip", attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: src, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });
@@ -221,7 +221,7 @@ export async function renderQuestionsTab(view: MainSidebarView) {
 				}
 				const sortedTags = Object.entries(tagGroups).sort((a, b) => b[1].length - a[1].length);
 				for (const [tag, tagFiles] of sortedTags) {
-					const group = listEl.createDiv({ attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
+					const group = listEl.createDiv({ cls: "qg-clip", attr: { style: "margin-bottom:8px;border:1px solid var(--background-modifier-border);border-radius:6px;overflow:hidden;" } });
 					const header = group.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 					const arrow = header.createSpan({ text: "▸", attr: { style: "font-size:17px;color:var(--text-muted);min-width:14px;" } });
 					header.createSpan({ text: "#" + tag, attr: { style: "font-weight:600;font-size:18px;color:var(--interactive-accent);flex:1;" } });

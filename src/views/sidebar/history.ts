@@ -24,7 +24,7 @@ export function renderHistoryView(view: MainSidebarView): void {
 
 	const listEl = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:8px;" } });
 	for (const entry of entries) {
-		const card = listEl.createDiv({ attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;overflow:hidden;" } });
+		const card = listEl.createDiv({ cls: "qg-clip", attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;overflow:hidden;" } });
 		const head = card.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;background:var(--background-secondary);" } });
 		head.createSpan({ text: entry.fileName, attr: { style: "font-weight:600;font-size:17px;flex:1;word-break:break-all;" } });
 		head.createSpan({ text: new Date(entry.timestamp).toLocaleString(), attr: { style: "color:var(--text-faint);font-size:15px;flex-shrink:0;" } });

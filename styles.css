@@ -217,7 +217,7 @@
 }
 
 /* ---------- Section headings ---------- */
-.question-generator-sidebar div[style*="text-transform:uppercase"] {
+.question-generator-sidebar .qg-section-heading {
 	font-size: 13px !important;
 	font-weight: 700 !important;
 	letter-spacing: 0.06em !important;
@@ -291,7 +291,7 @@ button.qg-interval-active:hover,
 }
 
 /* ---------- Filter/sort pills (review tab) ---------- */
-.question-generator-sidebar div[style*="display:flex;gap:2px"] > button {
+.question-generator-sidebar .qg-seg-bar > button {
 	border-radius: var(--qg-radius-pill) !important;
 	border: 1px solid transparent !important;
 }
@@ -318,14 +318,14 @@ button.qg-interval-active:hover,
 }
 
 /* ---------- Question cards ---------- */
-.question-generator-sidebar div[style*="border-radius:8px;padding:12px 14px"] {
+.question-generator-sidebar .qg-question-card {
 	background: var(--qg-surface-1) !important;
 	box-shadow: var(--qg-shadow-1) !important;
 	border: 1px solid transparent !important;
 }
 
 /* ---------- Review rows ---------- */
-.question-generator-sidebar div[style*="border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px"] {
+.question-generator-sidebar .qg-list-card {
 	border-radius: var(--qg-radius-sm) !important;
 	border-color: transparent !important;
 	background: var(--qg-surface-1) !important;
@@ -334,7 +334,7 @@ button.qg-interval-active:hover,
 }
 
 /* ---------- Heatmap container ---------- */
-.question-generator-sidebar div[style*="overflow:hidden"] {
+.question-generator-sidebar .qg-clip {
 	border-radius: var(--qg-radius-md) !important;
 }
 

@@ -43,7 +43,7 @@ export function renderAnswerView(view: MainSidebarView) {
 
 	for (const q of view.answerQuestions) {
 		const isGradable = q.type === "single" || q.type === "multi" || q.type === "judge";
-		const qEl = el.createDiv({ attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;" } });
+		const qEl = el.createDiv({ cls: "qg-question-card", attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;" } });
 
 		const headerRow = qEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:8px;" } });
 		headerRow.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;padding:2px 6px;border-radius:4px;background:var(--interactive-accent);color:var(--text-on-accent);font-weight:500;" } });

@@ -209,7 +209,7 @@ export async function renderKnowledgeManager(view: MainSidebarView) {
 			return;
 		}
 		for (const item of filtered) {
-			const row = wrap.createDiv({ attr: { style: "border-radius:12px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);overflow:hidden;" } });
+			const row = wrap.createDiv({ cls: "qg-clip", attr: { style: "border-radius:12px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);overflow:hidden;" } });
 			const head = row.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;" } });
 			const checkbox = head.createEl("input", { cls: "km-row-cb", attr: { type: "checkbox" } });
 			checkbox.dataset.tag = item.tag;
@@ -221,7 +221,7 @@ export async function renderKnowledgeManager(view: MainSidebarView) {
 			});
 			const arrow = head.createSpan({ text: "▸", attr: { style: "font-size:16px;min-width:14px;color:var(--text-muted);flex-shrink:0;" } });
 			const info = head.createDiv({ attr: { style: "flex:1;min-width:0;" } });
-			info.createDiv({ text: item.tag, attr: { style: "font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
+			info.createDiv({ text: item.tag, cls: "qg-clip", attr: { style: "font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" } });
 			const typeInfo = head.createDiv({ attr: { style: "color:var(--text-muted);font-size:15px;flex-shrink:0;margin-right:6px;" } });
 			const qCount = item.indexFiles.filter(s => s.sourceLabel === "题目索引").length;
 			const nCount = item.indexFiles.filter(s => s.sourceLabel === "笔记索引").length;

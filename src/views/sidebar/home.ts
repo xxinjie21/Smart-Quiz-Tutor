@@ -212,12 +212,12 @@ export async function renderHomeDefault(view: MainSidebarView) {
 		const wCard = miniCard(t("错题"), String(stats.totalWrong), stats.totalWrong > 0 ? "var(--color-red)" : undefined);
 		wCard.addEventListener("click", () => { view.activeSection = "wrong"; view.wrongView = "list"; void view.render(); });
 
-		const heatmapSection = el.createDiv({ cls: "qg-section-card", attr: { style: "margin-bottom:16px;padding:14px;border-radius:16px;overflow:hidden;" } });
+		const heatmapSection = el.createDiv({ cls: "qg-section-card qg-clip", attr: { style: "margin-bottom:16px;padding:14px;border-radius:16px;overflow:hidden;" } });
 		const heatmapData = await view.getActivityData();
 		view.renderHeatmap(heatmapSection, heatmapData, view.heatmapYear);
 
 		const actSection = el.createDiv({ attr: { style: "margin-bottom:14px;" } });
-		actSection.createDiv({ text: t("快捷操作"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
+		actSection.createDiv({ text: t("快捷操作"), cls: "qg-section-heading", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 
 		const actions = [
 			{ label: t("💬 AI 助手"), desc: t("基于你的笔记知识库进行问答"), action: () => { void view.plugin.activateChat(); } },
@@ -259,7 +259,7 @@ export async function renderHomeDefault(view: MainSidebarView) {
 		}
 
 		const toolsSection = el.createDiv({ attr: { style: "margin-top:10px;" } });
-		toolsSection.createDiv({ text: t("数据维护"), attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:0.5px;" } });
+		toolsSection.createDiv({ text: t("数据维护"), cls: "qg-section-heading", attr: { style: "font-size:18px;font-weight:600;color:var(--text-muted);margin:12px 0 8px;text-transform:uppercase;letter-spacing:0.5px;" } });
 		const kmRow = toolsSection.createDiv({ cls: "qg-action-row" });
 		const kmInfo = kmRow.createDiv({ cls: "qg-action-info", attr: { style: "flex:1;min-width:0;" } });
 		kmInfo.createDiv({ text: t("🧠 知识点管理"), cls: "qg-action-label" });

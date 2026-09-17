@@ -23,7 +23,7 @@ export async function renderReviewTab(view: MainSidebarView) {
 		...vaultNotes.map(n => ({ note: n, source: "note" as const })),
 	];
 
-	const filterBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
+	const filterBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 	const filterOpts: { key: "all" | "wrong" | "question" | "note"; label: string }[] = [
 		{ key: "all", label: t("全部") },
 		{ key: "wrong", label: t("错题") },
@@ -37,7 +37,7 @@ export async function renderReviewTab(view: MainSidebarView) {
 		btn.addEventListener("click", () => { view.reviewFilterType = opt.key; void view.renderReviewTab(); });
 	}
 
-	const sortBar = el.createDiv({ attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
+	const sortBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 	const sortOpts: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
 		{ key: "default", label: t("默认") },
 		{ key: "source", label: t("按源文件") },
@@ -97,7 +97,7 @@ export async function renderReviewTab(view: MainSidebarView) {
 }
 
 function renderReviewRow(view: MainSidebarView, container: HTMLElement, item: { note: WrongAnswerNote; source: string }, sourceLabel: Record<string, string>, sourceColor: Record<string, string>) {
-	const row = container.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;transition:background 0.15s;" } });
+	const row = container.createDiv({ cls: "qg-list-card", attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;transition:background 0.15s;" } });
 	row.classList.add("qg-hover-bg");
 	row.createSpan({ text: sourceLabel[item.source] || item.source, attr: { style: "min-width:32px;font-size:13px;padding:1px 5px;border-radius:3px;background:" + (sourceColor[item.source] || "var(--text-muted)") + ";color:white;" } });
 	const nameText = (item.note.sourceFile || item.note.baseName).replace(/\[\[|\]\]/g, "");
