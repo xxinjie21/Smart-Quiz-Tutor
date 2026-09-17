@@ -1,6 +1,6 @@
 import { Plugin, TFile, TFolder, Notice, Editor, Menu, MarkdownView, MarkdownFileInfo } from "obsidian";
 
-import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, CHAT_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, HISTORY_LIMIT, HISTORY_RESULT_CHARS } from "./constants";
+import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, HISTORY_LIMIT, HISTORY_RESULT_CHARS } from "./constants";
 import type { HistoryEntry, WrongAnswerNote, PluginSettings } from "./types";
 import { isAbs, ensureFolder, EXAM_SOURCE_EXTS } from "./utils/fs-utils";
 import { isDueForReview } from "./utils/review";
@@ -9,7 +9,6 @@ import { logError } from "./utils/log";
 import { KnowledgeService, type IndexSource } from "./services/knowledgeService";
 import { VaultDataService } from "./services/vaultDataService";
 import { MainSidebarView } from "./views/sidebarView";
-import { ChatView } from "./views/chatView";
 import { QuestionGeneratorSettingTab } from "./views/settingTab";
 import { setLanguage, t, tf } from "./i18n/index";
 
@@ -151,7 +150,6 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}
 
 		this.registerView(SIDEBAR_VIEW_TYPE, (leaf) => new MainSidebarView(leaf, this));
-		this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this));
 		this.addSettingTab(new QuestionGeneratorSettingTab(this.app, this));
 
 		this.addRibbonIcon("pencil", t("智学助手"), async () => {
@@ -174,8 +172,6 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					await leaf.setViewState({ type: SIDEBAR_VIEW_TYPE, active: true });
 				}
 			}
-			// AI 对话已内嵌到智学助手侧边栏，关闭旧的独立对话标签页
-			for (const chatLeaf of this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)) chatLeaf.detach();
 			void (async () => {
 				try {
 					await this.migrateOldWrongAnswers();
@@ -317,14 +313,12 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	onunload() {
 		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 		for (const leaf of leaves) { leaf.detach(); }
-		const chatLeaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
-		for (const leaf of chatLeaves) { leaf.detach(); }
 	}
 }
 
 // ===================== 公共导出（保持向后兼容） =====================
 export { t, tf, setLanguage, getLanguage, zh, en } from "./i18n/index";
-export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE, CHAT_VIEW_TYPE } from "./constants";
+export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE } from "./constants";
 export { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
 export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
 export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, htmlEscape } from "./utils/text";
@@ -345,5 +339,4 @@ export { VaultDataService } from "./services/vaultDataService";
 export { convertDocumentToText, stripRtf, htmlToMarkdown } from "./services/documentService";
 export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource, ChatMessage, ChatSearchScope } from "./types";
 export { MainSidebarView } from "./views/sidebarView";
-export { ChatView } from "./views/chatView";
 export { QuestionGeneratorSettingTab } from "./views/settingTab";

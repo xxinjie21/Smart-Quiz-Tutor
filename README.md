@@ -210,6 +210,15 @@ The sidebar has **6 tabs**:
 
 ## Changelog
 
+### v2.2.0
+- **Built-in AI chat** in the Smart Question Tutor sidebar (**AI** tab): retrieval over your notes, **multi-file references** (from the active note/selection or a file picker), a configurable **reference budget**, Markdown-rendered replies, copy / regenerate, and "stick-to-bottom" scrolling.
+- **Robust retrieval**: CJK-aware tokenization (2/3-gram), filename/path weighting, and two-stage candidate ranking (only matched files are read).
+- **Chat polish**: inline error/warning bubbles, token-size warning, `Ctrl/⌘+Enter` to send, auto-focus on open.
+- **Reliability**: idempotent folder creation (no "Folder already exists" on startup), friendly network-error messages, history pruning (kept ≤ 100 entries, results truncated), TTL caches for question/note/wrong lists.
+- **Maintainability**: `sidebarView.ts` split from ~3700 lines into 13 focused modules under `src/views/sidebar/`; data/list/export logic moved to `VaultDataService`; all brittle `[style*=]` CSS selectors replaced with semantic classes.
+- Rebuilt `main.js`; CI now runs build + unit tests; a guard test asserts no `eval` / no script injection.
+- 194 tests pass; `tsc` 0 errors; ESLint 0 errors.
+
 ### v2.1.0
 - **One-click Chinese/English language switch** — ~500 UI strings across all tabs now go through a zh/en dictionary; switch instantly from Settings (or the in-sidebar settings).
 - **Bilingual AI prompts** — question generation, exam extraction, note generation and tag suggestion support both languages, keeping the "language follows the material" rule.
@@ -441,6 +450,15 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 ---
 
 ## 更新日志
+
+### v2.2.0
+- **内置 AI 对话**：藏在**智学助手**侧边栏的 **AI** 页签——基于笔记检索回答，支持**多文件引用**（当前笔记/选区或从文件选择器挑选）、可配置**引用预算**、Markdown 渲染、复制/重新生成、贴底滚动。
+- **检索更稳**：中文 2/3-gram 分词、文件名/路径加权、两段式候选排序（只读取命中的文件）。
+- **对话体验**：就地错误/警告气泡、超长提示、`Ctrl/⌘+Enter` 发送、打开即聚焦。
+- **可靠性**：文件夹创建幂等（不再启动报 “Folder already exists”）、网络错误友好提示、历史记录裁剪（≤100 条，结果截断）、题目/笔记/错题列表短时缓存。
+- **可维护性**：`sidebarView.ts` 由约 3700 行拆分为 `src/views/sidebar/` 下 13 个模块；数据/列表/导出逻辑下沉到 `VaultDataService`；脆弱的 `[style*=]` CSS 选择器全部替换为语义 class。
+- 重建 `main.js`；CI 增加构建 + 单元测试；新增护栏测试确保无 `eval` / 无脚本注入。
+- 194 项测试通过；`tsc` 0 错误、ESLint 0 errors。
 
 ### v2.1.0
 - **一键中英文切换** — 全部 Tab 约 500 条 UI 文案接入中英文字典，在设置页（或侧边栏设置内）一键切换、即时生效。

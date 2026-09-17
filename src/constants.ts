@@ -60,7 +60,6 @@ export const INTERVAL_PRESETS: Record<string, IntervalPreset[]> = {
 };
 
 export const SIDEBAR_VIEW_TYPE = "question-generator-sidebar";
-export const CHAT_VIEW_TYPE = "question-generator-chat";
 
 export const CHAT_HISTORY_LIMIT = 50;
 export const CHAT_RETRIEVE_LIMIT = 5;
