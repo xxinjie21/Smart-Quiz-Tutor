@@ -1,5 +1,4 @@
 import { ItemView, Notice, TFile, TFolder, WorkspaceLeaf } from "obsidian";
-import { Document, Packer } from "docx";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -7,18 +6,15 @@ import type QuestionGeneratorPlugin from "../main";
 import {
 	SIDEBAR_VIEW_TYPE,
 	AI_REQUEST_TIMEOUT_MS,
-	SEARCH_DEBOUNCE_MS, PREVIEW_ITEMS_LIMIT,
+	PREVIEW_ITEMS_LIMIT,
 } from "../constants";
 import type { WrongAnswerNote, ParsedQuestion, TreeNode } from "../types";
 import type { IndexSource } from "../services/knowledgeService";
 import { parseFM, buildFM, knowledgeTags } from "../utils/frontmatter";
 import { isAbs, writeFileStr, readFileStr, ensureFolder, listMdFilesRecursive, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS, joinPath, isExcludedPath } from "../utils/fs-utils";
-import { safeName } from "../utils/text";
 import { convertDocumentToText } from "../services/documentService";
 import { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate, isDueForReview } from "../utils/review";
-import { debounce } from "../utils/debounce";
 import { buildFileTree } from "../utils/filetree";
-import { buildWordParagraphs, exportPdfDirect } from "../utils/exporter";
 import { getElectronRemote } from "../utils/electron";
 import { chatLLM, type ChatLLMOptions } from "../services/llmService";
 import { buildExamExtractPrompt } from "../services/questionService";
