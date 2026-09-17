@@ -1,5 +1,24 @@
 import { cleanSourceText } from "../utils/text";
 import { getLanguage } from "../i18n/index";
+import type { ParsedQuestion } from "../types";
+
+/** 主观题 AI 批改提示词（含题目/参考答案/学生作答）。 */
+export function buildGradePrompt(q: ParsedQuestion, userAnswer: string): string {
+	if (getLanguage() === "en") {
+		return `You are a strict examiner. Grade the student's answer against the reference answer.
+Line 1 must be "Score: n/10". Then give 2-3 sentences: what is correct, what is missing or wrong.
+
+Question: ${q.text}
+Reference answer: ${q.answer || "(none)"}
+Student answer: ${userAnswer}`;
+	}
+	return `你是一名严格的阅卷老师。请根据参考答案批改学生的作答。
+第一行输出「得分：n/10」，随后用 2-3 句话点评哪些点答对了、哪些遗漏或错误。
+
+题目：${q.text}
+参考答案：${q.answer || "(无)"}
+学生作答：${userAnswer}`;
+}
 
 export const QUESTION_FORMAT_RULES = `【输出格式要求 - 必须严格遵守】
 必须用 ## 题型名称 作为大类标题，标题下逐题编号。仅输出本次要求出现的题型，其余题型一律不出现。

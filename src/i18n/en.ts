@@ -453,4 +453,8 @@ export const en: Record<keyof typeof zh, string> = {
 	"上次输出不符合格式要求。请严格按格式重新输出：题型用 ## 开头，每题用 **编号.** 开头，答案行以「答案：」开头，多要点用 (1)(2)(3)。": "The previous output did not follow the required format. Re-output strictly: sections start with ##, each question starts with **number.**, answer lines start with \"Answer:\", and multiple points use (1)(2)(3).",
 	"重试后接口仍返回空，请检查模型与接口配置。": "Retry still returned empty. Check your model and endpoint config.",
 	"搜索错题（文件名/来源/知识点/内容）...": "Search wrong answers (filename / source / knowledge point / content)...",
+	"🤖 AI 批改": "🤖 AI grade",
+	"批改中...": "Grading...",
+	"批改失败：返回为空": "Grading failed: empty response",
+	"批改失败：{msg}": "Grading failed: {msg}",
 };

@@ -6,6 +6,7 @@ import { parseQuestions } from "../../utils/parse";
 import { splitAnswerContent, normalizeExamContent } from "../../utils/layout";
 import { buildFM, buildKnowledgeLinks } from "../../utils/frontmatter";
 import { safeName } from "../../utils/text";
+import { buildGradePrompt } from "../../services/questionService";
 import { isAbs, writeFileStr, joinPath, ensureFolder } from "../../utils/fs-utils";
 import { t, tf } from "../../i18n/index";
 
@@ -220,6 +221,25 @@ function answerSubmit(view: MainSidebarView) {
 				expEl.createDiv({ text: t("考点解析"), cls: "qg-exp-title" });
 				const expLines = splitAnswerContent(q.explanation);
 				for (const line of expLines) expEl.createDiv({ text: line, cls: "qg-exp-line" });
+			}
+			if (userAnswer && q.answer) {
+				const gradeDiv = qEl.createDiv({ attr: { style: "margin-top:8px;" } });
+				const gradeBtn = gradeDiv.createEl("button", { text: t("🤖 AI 批改"), attr: { style: "padding:4px 12px;border-radius:4px;cursor:pointer;font-size:16px;border:1px solid var(--interactive-accent);background:transparent;color:var(--interactive-accent);" } });
+				gradeBtn.addEventListener("click", () => {
+					void (async () => {
+						gradeBtn.setText(t("批改中..."));
+						gradeBtn.disabled = true;
+						try {
+							const res = await view.callAIWithPrompt(buildGradePrompt(q, userAnswer));
+							gradeDiv.createDiv({ text: res || t("批改失败：返回为空"), attr: { style: "margin-top:6px;padding:6px 10px;border-radius:4px;background:var(--background-secondary);font-size:16px;line-height:1.6;white-space:pre-wrap;" } });
+						} catch (err) {
+							gradeDiv.createDiv({ text: tf("批改失败：{msg}", { msg: (err as Error).message }), attr: { style: "margin-top:6px;color:var(--color-red);font-size:16px;" } });
+						} finally {
+							gradeBtn.setText(t("🤖 AI 批改"));
+							gradeBtn.disabled = false;
+						}
+					})();
+				});
 			}
 		}
 	}
