@@ -79,6 +79,7 @@ export interface PluginSettings {
 	chatHistory: ChatMessage[];
 	chatSearchScope: ChatSearchScope;
 	chatRefBudget: number;
+	sidebarZoom: number;
 }
 
 export interface TreeNode {

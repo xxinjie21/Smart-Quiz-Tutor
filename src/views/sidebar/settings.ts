@@ -2,7 +2,7 @@ import type { MainSidebarView } from "../sidebarView";
 import { INTERVAL_PRESETS } from "../../constants";
 import { t, setLanguage } from "../../i18n/index";
 
-/** 设置页（从 MainSidebarView 抽出；仅依赖 innerContentEl 与 plugin.settings）。 */
+/** 设置页（侧边栏内自绘；从 MainSidebarView 抽出）。 */
 export function renderSettingsTab(view: MainSidebarView): void {
 	if (!view.innerContentEl) return;
 	const el = view.innerContentEl;
@@ -10,120 +10,174 @@ export function renderSettingsTab(view: MainSidebarView): void {
 	el.empty();
 	const s = view.plugin.settings;
 
-	const section = (title: string) => {
-		el.createDiv({ text: title, attr: { style: "font-size:19px;font-weight:600;color:var(--text-muted);margin:14px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--background-modifier-border);" } });
+	// ---- 构建助手 ----
+	const card = (title?: string) => {
+		const c = el.createDiv({ cls: "qg-settings-card" });
+		if (title) c.createDiv({ text: title, cls: "qg-section-heading" });
+		return c;
 	};
-	const fieldRow = (label: string, minW = "70px") => {
-		const row = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:18px;" } });
-		row.createSpan({ text: label, attr: { style: "min-width:" + minW + ";color:var(--text-muted);" } });
+	const field = (label: string) => {
+		const row = el.createDiv({ cls: "qg-field-row" });
+		if (label) row.createSpan({ text: label, cls: "qg-field-label" });
 		return row;
 	};
 	const textInput = (row: HTMLElement, value: string, onChange: (v: string) => void, placeholder?: string) => {
-		const inp = row.createEl("input", { attr: { type: "text", value, style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);", placeholder: placeholder || "" } });
+		const inp = row.createEl("input", { attr: { type: "text", value, placeholder: placeholder || "" } });
+		inp.addClass("qg-field-input");
 		inp.addEventListener("change", () => { onChange(inp.value); void view.plugin.saveSettings(); });
 		return inp;
 	};
+	const numberInput = (row: HTMLElement, value: string, onChange: (v: string) => void, attrs: Record<string, string> = {}) => {
+		const inp = row.createEl("input", { attr: { type: "number", value: String(value), ...attrs } });
+		inp.addClass("qg-field-input qg-num-input");
+		inp.addEventListener("change", () => { onChange(inp.value); void view.plugin.saveSettings(); });
+		return inp;
+	};
+	const selectInput = (row: HTMLElement, value: string, onChange: (v: string) => void) => {
+		const sel = row.createEl("select", { cls: "qg-field-input" });
+		sel.value = value;
+		sel.addEventListener("change", () => { onChange(sel.value); void view.plugin.saveSettings(); });
+		return sel;
+	};
+	const checkboxRow = (label: string, checked: boolean, onChange: (v: boolean) => void) => {
+		const row = el.createDiv({ cls: "qg-field-row" });
+		const cb = row.createEl("input", { attr: { type: "checkbox" } });
+		cb.checked = checked;
+		cb.addEventListener("change", () => { onChange(cb.checked); void view.plugin.saveSettings(); });
+		row.createSpan({ text: label, cls: "qg-field-check-label" });
+		return row;
+	};
+	const hint = (text: string) => el.createDiv({ text, cls: "qg-callout" });
 
-	section(t("界面语言"));
-	const langRow = fieldRow(t("语言"));
-	const langSel = langRow.createEl("select", { attr: { style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
-	langSel.createEl("option", { value: "zh", text: "中文" });
-	langSel.createEl("option", { value: "en", text: "English" });
-	langSel.value = s.language || "zh";
-	langSel.addEventListener("change", () => {
-		s.language = langSel.value as "zh" | "en";
-		setLanguage(s.language);
-		void view.plugin.saveSettings();
-		void view.renderSettingsTab();
-	});
-
-	section(t("文件夹"));
-	el.createDiv({ text: t("根文件夹下包含所有模块子文件夹，修改后需重启插件生效"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:8px;" } });
-	textInput(fieldRow(t("根文件夹")), s.rootFolder, v => { s.rootFolder = v; }, "智学助手");
-	textInput(fieldRow(t("题目文件夹")), s.questionFolder, v => { s.questionFolder = v; });
-	textInput(fieldRow(t("错题文件夹")), s.wrongBookFolder, v => { s.wrongBookFolder = v; });
-	textInput(fieldRow(t("笔记文件夹")), s.noteViewFolder, v => { s.noteViewFolder = v; }, "笔记");
-	textInput(fieldRow(t("知识点文件夹")), s.knowledgeFolder, v => { s.knowledgeFolder = v; }, "知识点");
-	textInput(fieldRow(t("转换md文件夹")), s.convertedMdFolder, v => { s.convertedMdFolder = v; }, "md文件");
-	textInput(fieldRow(t("AI识别文件夹")), s.extractedExamFolder, v => { s.extractedExamFolder = v; }, "题目/识别试卷");
-	textInput(fieldRow(t("排除文件夹")), s.excludeFolders, v => { s.excludeFolders = v; });
-	const asRow = fieldRow("");
-	const asCb = asRow.createEl("input", { attr: { type: "checkbox" } });
-	asCb.checked = s.autoSave;
-	asCb.addEventListener("change", () => { s.autoSave = asCb.checked; void view.plugin.saveSettings(); });
-	asRow.createSpan({ text: t("生成后自动保存到题库") });
-	el.createDiv({ text: t("预期目录结构：\n根文件夹/\n├─ 题目/（含 识别试卷/）\n├─ 错题/\n├─ 笔记/\n├─ 知识点/（统一索引，含相关题目/相关笔记/相关错题三段）\n└─ md文件/"), attr: { style: "color:var(--text-muted);font-size:16px;line-height:1.6;margin-top:10px;padding:10px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);white-space:pre-wrap;" } });
-
-	section(t("默认题目数量"));
-	const counts = [
-		{ label: t("单选题"), key: "countSingle" as const },
-		{ label: t("多选题"), key: "countMulti" as const },
-		{ label: t("判断题"), key: "countJudge" as const },
-		{ label: t("填空题"), key: "countBlank" as const },
-		{ label: t("简答题"), key: "countEssay" as const },
-	];
-	const countGrid = el.createDiv({ attr: { style: "display:grid;grid-template-columns:1fr 1fr;gap:6px;" } });
-	for (const c of counts) {
-		const row = countGrid.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;font-size:18px;" } });
-		row.createSpan({ text: c.label, attr: { style: "min-width:50px;color:var(--text-muted);" } });
-		const inp = row.createEl("input", { attr: { type: "number", min: "0", max: "50", value: String(s[c.key]), style: "width:50px;padding:4px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
-		inp.addEventListener("change", () => { s[c.key] = parseInt(inp.value) || 0; void view.plugin.saveSettings(); });
-		row.createSpan({ text: t("题"), attr: { style: "color:var(--text-muted);" } });
+	// ---- 界面语言 ----
+	let c = card(t("界面语言"));
+	{
+		const row = field(t("语言"));
+		const sel = selectInput(row, s.language || "zh", v => {
+			s.language = v as "zh" | "en";
+			setLanguage(s.language);
+			void view.renderSettingsTab();
+		});
+		sel.createEl("option", { value: "zh", text: "中文" });
+		sel.createEl("option", { value: "en", text: "English" });
 	}
 
-	section(t("API 配置"));
-	const apiTypeRow = fieldRow(t("接口类型"));
-	const apiTypeSel = apiTypeRow.createEl("select", { attr: { style: "flex:1;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);" } });
-	apiTypeSel.createEl("option", { value: "ollama", text: "Ollama" });
-	apiTypeSel.createEl("option", { value: "openai", text: t("OpenAI兼容") });
-	apiTypeSel.value = s.apiType;
-	apiTypeSel.addEventListener("change", () => { s.apiType = apiTypeSel.value as "ollama" | "openai"; void view.plugin.saveSettings(); });
-	textInput(fieldRow(t("接口地址")), s.baseUrl, v => { s.baseUrl = v; });
-	textInput(fieldRow(t("模型名称")), s.modelName, v => { s.modelName = v; });
-	textInput(fieldRow(t("API Key")), s.apiKey || "", v => { s.apiKey = v; });
-	const tempRow = fieldRow("Temperature");
-	const tempInput = tempRow.createEl("input", { attr: { type: "number", min: "0", max: "2", step: "0.1", value: String(s.temperature), style: "width:60px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
-	tempInput.addEventListener("change", () => { s.temperature = parseFloat(tempInput.value) || 0.1; void view.plugin.saveSettings(); });
-	tempRow.createSpan({ text: String(s.temperature), attr: { id: "pg-temp-val", style: "color:var(--text-muted);min-width:30px;" } });
-	tempInput.addEventListener("input", () => { const v = tempRow.querySelector("#pg-temp-val"); if (v) v.textContent = tempInput.value; });
+	// ---- 显示（字号） ----
+	c = card(t("显示"));
+	{
+		const row = field(t("侧边栏字号"));
+		const z = s.sidebarZoom || 1;
+		const val = row.createSpan({ text: Math.round(z * 100) + "%", cls: "qg-zoom-val" });
+		row.createDiv({ attr: { style: "flex:1;" } });
+		const mk = (txt: string, delta: number, lbl: string) => {
+			const b = row.createEl("button", { text: txt, cls: "qg-zoom-btn", attr: { title: lbl, "aria-label": lbl } });
+			b.addEventListener("click", () => { view.adjustZoom(delta); val.setText(Math.round((s.sidebarZoom || 1) * 100) + "%"); });
+			return b;
+		};
+		mk("A−", -0.05, t("缩小字号"));
+		mk("A+", 0.05, t("放大字号"));
+		row.createEl("button", { text: t("复位"), cls: "qg-zoom-btn", attr: { title: t("字号复位") } })
+			.addEventListener("click", () => { view.adjustZoom(1 - (s.sidebarZoom || 1)); val.setText("100%"); });
+	}
 
-	section(t("复习间隔设置"));
-	el.createDiv({ text: t("参数越大复习间隔越长，记忆越牢固但可能遗忘；参数越小复习越频繁，短期效果好但耗时多。推荐使用默认值。"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:10px;line-height:1.5;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
+	// ---- 文件夹 ----
+	c = card(t("文件夹"));
+	{
+		textInput(field(t("根文件夹")), s.rootFolder, v => { s.rootFolder = v; }, "智学助手");
+		textInput(field(t("题目文件夹")), s.questionFolder, v => { s.questionFolder = v; });
+		textInput(field(t("错题文件夹")), s.wrongBookFolder, v => { s.wrongBookFolder = v; });
+		textInput(field(t("笔记文件夹")), s.noteViewFolder, v => { s.noteViewFolder = v; }, "笔记");
+		textInput(field(t("知识点文件夹")), s.knowledgeFolder, v => { s.knowledgeFolder = v; }, "知识点");
+		textInput(field(t("转换md文件夹")), s.convertedMdFolder, v => { s.convertedMdFolder = v; }, "md文件");
+		textInput(field(t("AI识别文件夹")), s.extractedExamFolder, v => { s.extractedExamFolder = v; }, "题目/识别试卷");
+		textInput(field(t("排除文件夹")), s.excludeFolders, v => { s.excludeFolders = v; });
+		checkboxRow(t("生成后自动保存到题库"), s.autoSave, v => { s.autoSave = v; });
+		hint(t("预期目录结构：\n根文件夹/\n├─ 题目/（含 识别试卷/）\n├─ 错题/\n├─ 笔记/\n├─ 知识点/（统一索引，含相关题目/相关笔记/相关错题三段）\n└─ md文件/"));
+	}
 
-	const renderIntervalRow = (label: string, currentValue: string, presetKey: string, onChange: (v: string) => void) => {
-		const row = el.createDiv({ attr: { style: "margin-bottom:14px;padding:10px;border-radius:6px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);" } });
-		row.createDiv({ text: label, attr: { style: "font-size:18px;font-weight:600;margin-bottom:6px;" } });
-		const presets = INTERVAL_PRESETS[presetKey]!;
-		const btnRow = row.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:6px;" } });
-		const currentPreset = presets.find(p => p.values === currentValue);
-		for (const p of presets) {
-			const isActive = p.values === currentValue;
-			const btn = btnRow.createEl("button", { text: t(p.label), cls: isActive ? "qg-interval-active" : undefined, attr: { style: "padding:3px 10px;border-radius:3px;cursor:pointer;font-size:16px;border:1px solid var(--background-modifier-border);" + (isActive ? "" : "background:var(--background-primary);color:var(--text-muted);") } });
-			btn.addEventListener("click", () => { onChange(p.values); void view.plugin.saveSettings(); row.parentElement && view.renderSettingsTab(); });
+	// ---- 默认题目数量 ----
+	c = card(t("默认题目数量"));
+	{
+		const grid = c.createDiv({ cls: "qg-settings-grid" });
+		const counts: { label: string; key: "countSingle" | "countMulti" | "countJudge" | "countBlank" | "countEssay" }[] = [
+			{ label: t("单选题"), key: "countSingle" },
+			{ label: t("多选题"), key: "countMulti" },
+			{ label: t("判断题"), key: "countJudge" },
+			{ label: t("填空题"), key: "countBlank" },
+			{ label: t("简答题"), key: "countEssay" },
+		];
+		for (const item of counts) {
+			const row = grid.createDiv({ cls: "qg-field-row" });
+			row.createSpan({ text: item.label, cls: "qg-field-label" });
+			numberInput(row, String(s[item.key]), v => { s[item.key] = parseInt(v) || 0; }, { min: "0", max: "50" });
+			row.createSpan({ text: t("题"), cls: "qg-field-suffix" });
 		}
-		const activePreset = currentPreset || presets[1]!;
-		const tipRow = row.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:16px;color:var(--text-muted);" } });
-		tipRow.createSpan({ text: "💡", attr: { style: "font-size:14px;" } });
-		tipRow.createSpan({ text: t(activePreset.hint) });
-		const customRow = row.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;" } });
-		customRow.createSpan({ text: t("自定义："), attr: { style: "font-size:16px;color:var(--text-muted);flex-shrink:0;" } });
-		const inp = customRow.createEl("input", { attr: { type: "text", value: currentValue, style: "flex:1;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:16px;font-family:monospace;", placeholder: t("如 1,2,4,7,15,30") } });
-		inp.addEventListener("change", () => { onChange(inp.value); void view.plugin.saveSettings(); });
-	};
+	}
 
-	renderIntervalRow(t("错题复习间隔（天）"), s.wrongReviewIntervals, "wrong", v => { s.wrongReviewIntervals = v; });
-	renderIntervalRow(t("题目复习间隔（天）"), s.questionReviewIntervals, "question", v => { s.questionReviewIntervals = v; });
-	renderIntervalRow(t("笔记复习间隔（天）"), s.noteReviewIntervals, "note", v => { s.noteReviewIntervals = v; });
-	section(t("学习设置"));
-	const wpRow = fieldRow(t("薄弱点阈值"));
-	const wpInput = wpRow.createEl("input", { attr: { type: "number", min: "1", max: "20", value: String(s.weakPointThreshold), style: "width:60px;padding:5px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;" } });
-	wpInput.addEventListener("change", () => { s.weakPointThreshold = parseInt(wpInput.value) || 2; void view.plugin.saveSettings(); });
-	wpRow.createSpan({ text: t("次以上错题标记为薄弱"), attr: { style: "color:var(--text-muted);" } });
-	const rrRow = fieldRow("");
-	const rrCb = rrRow.createEl("input", { attr: { type: "checkbox" } });
-	rrCb.checked = s.autoReviewReminder;
-	rrCb.addEventListener("change", () => { s.autoReviewReminder = rrCb.checked; void view.plugin.saveSettings(); });
-	rrRow.createSpan({ text: t("启动时提醒复习") });
+	// ---- API 配置 ----
+	c = card(t("API 配置"));
+	{
+		const row = field(t("接口类型"));
+		const sel = selectInput(row, s.apiType, v => { s.apiType = v as "ollama" | "openai"; });
+		sel.createEl("option", { value: "ollama", text: "Ollama" });
+		sel.createEl("option", { value: "openai", text: t("OpenAI兼容") });
+		textInput(field(t("接口地址")), s.baseUrl, v => { s.baseUrl = v; });
+		textInput(field(t("模型名称")), s.modelName, v => { s.modelName = v; });
+		textInput(field(t("API Key")), s.apiKey || "", v => { s.apiKey = v; });
+		const tempRow = field("Temperature");
+		numberInput(tempRow, String(s.temperature), v => { s.temperature = parseFloat(v) || 0.1; }, { min: "0", max: "2", step: "0.1" });
+		tempRow.createSpan({ text: String(s.temperature), cls: "qg-field-suffix" });
+	}
+
+	// ---- 复习间隔设置 ----
+	c = card(t("复习间隔设置"));
+	{
+		hint(t("参数越大复习间隔越长，记忆越牢固但可能遗忘。推荐使用默认值。"));
+		const intervalConfigs: { label: string; key: "wrongReviewIntervals" | "questionReviewIntervals" | "noteReviewIntervals"; presetKey: string }[] = [
+			{ label: t("错题复习间隔（天）"), key: "wrongReviewIntervals", presetKey: "wrong" },
+			{ label: t("题目复习间隔（天）"), key: "questionReviewIntervals", presetKey: "question" },
+			{ label: t("笔记复习间隔（天）"), key: "noteReviewIntervals", presetKey: "note" },
+		];
+		for (const cfg of intervalConfigs) {
+			const presets = INTERVAL_PRESETS[cfg.presetKey]!;
+			const currentVal = s[cfg.key];
+			const currentPreset = presets.find(p => p.values === currentVal) || presets[1]!;
+			const sub = c.createDiv({ cls: "qg-settings-sub-card" });
+			sub.createDiv({ text: cfg.label, cls: "qg-settings-sub-title" });
+			const btnRow = sub.createDiv({ cls: "qg-preset-row" });
+			for (const p of presets) {
+				const isActive = p.values === currentVal;
+				const b = btnRow.createEl("button", { text: t(p.label), cls: isActive ? "qg-preset-btn qg-interval-active" : "qg-preset-btn" });
+				b.addEventListener("click", () => { s[cfg.key] = p.values; void view.plugin.saveSettings(); void view.renderSettingsTab(); });
+			}
+			const tip = sub.createDiv({ cls: "qg-field-tip" });
+			tip.createSpan({ text: "💡" });
+			tip.createSpan({ text: t(currentPreset.hint) });
+			const customRow = sub.createDiv({ cls: "qg-field-row" });
+			customRow.createSpan({ text: t("自定义："), cls: "qg-field-label" });
+			textInput(customRow, currentVal, v => { s[cfg.key] = v; }, t("如 1,2,4,7,15,30"));
+		}
+	}
+
+	// ---- 学习设置 ----
+	c = card(t("学习设置"));
+	{
+		const wpRow = field(t("薄弱点阈值"));
+		numberInput(wpRow, String(s.weakPointThreshold), v => { s.weakPointThreshold = parseInt(v) || 2; }, { min: "1", max: "20" });
+		wpRow.createSpan({ text: t("次以上错题标记为薄弱"), cls: "qg-field-suffix" });
+		checkboxRow(t("启动时提醒复习"), s.autoReviewReminder, v => { s.autoReviewReminder = v; });
+	}
+
+	// ---- AI 助手 ----
+	c = card(t("AI 助手"));
+	{
+		textInput(field(t("引用总预算(字)")), String(s.chatRefBudget), v => { s.chatRefBudget = Math.max(0, parseInt(v) || 0); });
+		const row = field(t("聊天检索范围"));
+		const sel = selectInput(row, s.chatSearchScope, v => { s.chatSearchScope = v === "vault" ? "vault" : "plugin"; });
+		sel.createEl("option", { text: t("仅插件知识库"), value: "plugin" });
+		sel.createEl("option", { text: t("整个 vault"), value: "vault" });
+		hint(t("「整个 vault」会把任意文件夹中命中的笔记内容发送给已配置的 AI 接口，请注意隐私"));
+	}
 
 	window.requestAnimationFrame(() => { el.scrollTop = savedScrollTop; });
 }

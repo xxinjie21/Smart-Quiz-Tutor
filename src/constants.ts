@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	chatHistory: [],
 	chatSearchScope: "plugin",
 	chatRefBudget: 60000,
+	sidebarZoom: 1,
 };
 
 export const SYSTEM_TAGS = ["错题", "题目", "笔记"];

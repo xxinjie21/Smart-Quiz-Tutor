@@ -16,6 +16,11 @@
 
 	--qg-accent: var(--interactive-accent);
 
+	/* 语义色（对错/参考答案/考点解析/彩色小标签文字），带主题回退 */
+	--qg-success: var(--color-green, #2e7d32);
+	--qg-info: var(--color-blue, #1565c0);
+	--qg-on-chip: var(--text-on-accent, #ffffff);
+
 	/* Softened border — Craft barely uses borders */
 	--qg-border: var(--background-modifier-border);
 
@@ -59,6 +64,8 @@
 	overflow: hidden;
 	background: var(--qg-bg);
 	font-feature-settings: "tnum", "kern";
+	/* 侧边栏整体缩放（A−/A+ 快速调字号） */
+	zoom: var(--qg-zoom, 1);
 }
 
 /* Scrollable content area; the chat tab overrides it to a pinned composer. */
@@ -76,6 +83,24 @@
 }
 
 /* ---------- Header ---------- */
+.qg-zoom-control { display: flex; gap: 4px; flex-shrink: 0; }
+.qg-zoom-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 26px;
+	height: 24px;
+	padding: 0 6px !important;
+	border-radius: var(--qg-radius-pill, 999px) !important;
+	border: 1px solid var(--qg-border, var(--background-modifier-border)) !important;
+	background: var(--qg-surface-2, var(--background-secondary)) !important;
+	color: var(--text-muted) !important;
+	font-size: 13px !important;
+	font-weight: 600 !important;
+	cursor: pointer !important;
+	box-shadow: none !important;
+}
+.qg-zoom-btn:hover { background: var(--qg-surface-3, var(--background-modifier-hover)) !important; color: var(--text-normal) !important; }
 .qg-header {
 	border-bottom: 1px solid color-mix(in srgb, var(--qg-border) 50%, transparent) !important;
 	margin-bottom: 12px;
@@ -656,3 +681,86 @@ button.qg-interval-active:hover,
 }
 .qg-chat-composer-bar { display: flex; align-items: center; gap: 6px; padding: 6px 0 2px; }
 .qg-chat-spacer { flex: 1; }
+
+/* ============================================================
+   Sidebar settings tab (in-plugin 设置)
+   ============================================================ */
+.qg-settings-card {
+	background: var(--qg-surface-1);
+	border-radius: var(--qg-radius-lg, 16px);
+	box-shadow: var(--qg-shadow-1);
+	padding: 8px 14px 10px;
+	margin-bottom: 14px;
+	border: 1px solid transparent;
+}
+.qg-settings-card .qg-section-heading { margin-top: 8px; }
+
+.qg-settings-grid { display: grid; grid-template-columns: 1fr; gap: 2px; }
+
+.qg-field-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+	min-width: 0;
+}
+.qg-field-label {
+	flex-shrink: 0;
+	min-width: 78px;
+	color: var(--text-muted);
+	font-size: 15px;
+}
+.qg-field-suffix { color: var(--text-muted); font-size: 14px; flex-shrink: 0; }
+.qg-field-check-label { font-size: 15px; color: var(--text-normal); }
+
+.question-generator-sidebar input.qg-field-input,
+.question-generator-sidebar select.qg-field-input {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+}
+.qg-num-input { flex: 0 0 auto !important; width: 64px !important; text-align: center; }
+.qg-zoom-val {
+	min-width: 44px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	font-size: 14px;
+}
+
+.qg-callout {
+	margin-top: 6px;
+	padding: 8px 10px;
+	border-radius: var(--qg-radius-sm, 8px);
+	background: var(--qg-surface-2);
+	border: 1px solid color-mix(in srgb, var(--qg-border, var(--background-modifier-border)) 60%, transparent);
+	color: var(--text-muted);
+	font-size: 13px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.qg-settings-sub-card {
+	border-radius: var(--qg-radius-md, 12px);
+	background: var(--qg-surface-2);
+	padding: 10px;
+	margin-bottom: 10px;
+}
+.qg-settings-sub-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.qg-preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.question-generator-sidebar .qg-preset-btn {
+	padding: 2px 12px !important;
+	border-radius: var(--qg-radius-pill, 999px) !important;
+	font-size: 13px !important;
+	font-weight: 500 !important;
+}
+.qg-field-tip {
+	display: flex;
+	gap: 6px;
+	align-items: flex-start;
+	font-size: 13px;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	line-height: 1.5;
+}

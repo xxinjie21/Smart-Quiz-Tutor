@@ -150,12 +150,20 @@ export class MainSidebarView extends ItemView {
 		const container = this.containerEl.children[1] as HTMLElement;
 		if (!container) return;
 		container.addClass("question-generator-sidebar");
+		container.setCssProps?.({ "--qg-zoom": String(this.plugin.settings.sidebarZoom || 1) });
 
 		if (!this.navEl || !this.navEl.isConnected) {
 			container.empty();
 
-			const header = container.createDiv({ cls: "qg-header", attr: { style: "padding:14px 16px 10px;" } });
-			header.createDiv({ text: t("智学助手"), attr: { style: "font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
+			const header = container.createDiv({ cls: "qg-header", attr: { style: "padding:14px 16px 10px;display:flex;align-items:center;gap:8px;" } });
+			header.createDiv({ text: t("智学助手"), attr: { style: "flex:1;font-size:22px;font-weight:700;letter-spacing:-0.01em;" } });
+			const zoomCtl = header.createDiv({ cls: "qg-zoom-control" });
+			const zoomBtn = (txt: string, delta: number, label: string) => {
+				const b = zoomCtl.createEl("button", { text: txt, cls: "qg-zoom-btn", attr: { title: label, "aria-label": label } });
+				b.addEventListener("click", () => this.adjustZoom(delta));
+			};
+			zoomBtn("A−", -0.05, t("缩小字号"));
+			zoomBtn("A+", 0.05, t("放大字号"));
 
 			const nav = container.createDiv({ cls: "qg-nav", attr: { style: "display:flex;margin:0 14px 12px;" } });
 			const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "chat" | "settings"; label: string; icon: string }[] = [
@@ -217,6 +225,16 @@ export class MainSidebarView extends ItemView {
 			[{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "translateY(0)" }],
 			{ duration: 250, easing: "cubic-bezier(0.4, 0, 0.2, 1)" }
 		);
+	}
+
+	/** 快速调整侧边栏显示比例（作用于智学助手侧边栏，不影响 Obsidian 全局）。 */
+	adjustZoom(delta: number) {
+		const next = Math.min(1.3, Math.max(0.75, Math.round(((this.plugin.settings.sidebarZoom || 1) + delta) * 100) / 100));
+		if (next === (this.plugin.settings.sidebarZoom || 1)) return;
+		this.plugin.settings.sidebarZoom = next;
+		void this.plugin.saveSettings();
+		const container = this.containerEl.children[1] as HTMLElement;
+		container?.setCssProps?.({ "--qg-zoom": String(next) });
 	}
 
 	// ===================== AI CHAT TAB =====================

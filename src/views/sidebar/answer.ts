@@ -177,13 +177,13 @@ function answerSubmit(view: MainSidebarView) {
 
 			if (q.answer) {
 				const refLabel = qEl.createDiv({ attr: { style: "margin-top:4px;" } });
-				refLabel.createDiv({ text: t("参考答案"), attr: { style: "font-size:18px;font-weight:700;color:#2E7D32;margin-bottom:2px;" } });
+				refLabel.createDiv({ text: t("参考答案"), attr: { style: "font-size:18px;font-weight:700;color:var(--qg-success);margin-bottom:2px;" } });
 				const steps = splitAnswerContent(q.answer);
 				for (const step of steps) qEl.createDiv({ text: step, attr: { style: "font-size:18px;line-height:1.6;" } });
 			}
 			if (q.explanation) {
 				const expLabel = qEl.createDiv({ attr: { style: "margin-top:4px;" } });
-				expLabel.createDiv({ text: t("考点解析"), attr: { style: "font-size:18px;font-weight:700;color:#1565C0;margin-bottom:2px;" } });
+				expLabel.createDiv({ text: t("考点解析"), attr: { style: "font-size:18px;font-weight:700;color:var(--qg-info);margin-bottom:2px;" } });
 				const expLines = splitAnswerContent(q.explanation);
 				for (const line of expLines) qEl.createDiv({ text: line, attr: { style: "font-size:17px;line-height:1.6;color:var(--text-muted);" } });
 			}
@@ -212,7 +212,7 @@ function answerSubmit(view: MainSidebarView) {
 			}
 			if (q.answer) {
 				const refAns = qEl.createDiv({ attr: { style: "margin-top:6px;" } });
-				refAns.createDiv({ text: t("参考答案"), attr: { style: "font-size:17px;color:#2E7D32;font-weight:700;margin-bottom:2px;" } });
+				refAns.createDiv({ text: t("参考答案"), attr: { style: "font-size:17px;color:var(--qg-success);font-weight:700;margin-bottom:2px;" } });
 				const steps = splitAnswerContent(q.answer);
 				for (const step of steps) refAns.createDiv({ text: step, attr: { style: "padding:3px 10px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 8%, transparent);font-size:19px;line-height:1.7;" } });
 			}
