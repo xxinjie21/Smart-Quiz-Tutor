@@ -5,25 +5,24 @@ import * as path from "path";
 
 import type QuestionGeneratorPlugin from "../main";
 import {
-	SIDEBAR_VIEW_TYPE, MAX_UNTAGGED_DISPLAY, MAX_HISTORY_SNIPPET,
-	AI_REQUEST_TIMEOUT_MS, TOKEN_WARN_THRESHOLD,
+	SIDEBAR_VIEW_TYPE, MAX_UNTAGGED_DISPLAY,
+	AI_REQUEST_TIMEOUT_MS,
 	SEARCH_DEBOUNCE_MS, PREVIEW_ITEMS_LIMIT,
 } from "../constants";
-import type { HistoryEntry, WrongAnswerNote, ParsedQuestion, PluginSettings, TreeNode } from "../types";
+import type { WrongAnswerNote, ParsedQuestion, TreeNode } from "../types";
 import type { IndexSource } from "../services/knowledgeService";
 import { parseFM, buildFM, knowledgeTags } from "../utils/frontmatter";
 import { isAbs, daysUntil, writeFileStr, readFileStr, deleteFileAbs, ensureFolder, listMdFilesRecursive, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS, joinPath, isExcludedPath } from "../utils/fs-utils";
-import { safeName, cleanSourceText, estimateTokens, stripAnswersForExport } from "../utils/text";
+import { safeName } from "../utils/text";
 import { convertDocumentToText } from "../services/documentService";
 import { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate, isDueForReview } from "../utils/review";
-import { parseQuestions } from "../utils/parse";
 import { debounce } from "../utils/debounce";
 import { buildFileTree } from "../utils/filetree";
-import { stripAnswerSummarySection, fixSequentialNumbers, normalizeExamContent } from "../utils/layout";
+import { stripAnswerSummarySection } from "../utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "../utils/exporter";
 import { getElectronRemote } from "../utils/electron";
 import { chatLLM, type ChatLLMOptions } from "../services/llmService";
-import { buildExamExtractPrompt, buildGeneratePrompt, parseAITagsFromResult } from "../services/questionService";
+import { buildExamExtractPrompt } from "../services/questionService";
 import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeService";
 import type { NoteGenSourceType } from "../services/noteService";
 import { t, tf, getLanguage } from "../i18n/index";
@@ -36,6 +35,7 @@ import { startAnswer as startAnswerSection, renderAnswerView as renderAnswerView
 import { renderTaggerView as renderTaggerViewSection, runAITagging as runAITaggingSection } from "./sidebar/tagger";
 import { renderExamBrowser as renderExamBrowserSection, extractFromExamSelected as extractFromExamSelectedSection, openCurrentFileExtract as openCurrentFileExtractSection } from "./sidebar/exam";
 import { renderNoteGenView as renderNoteGenViewSection, noteGenStartDirect as noteGenStartDirectSection } from "./sidebar/noteGen";
+import { renderFilePicker as renderFilePickerSection, generateFromCurrentFile as generateFromCurrentFileSection, generateFromSelected as generateFromSelectedSection, loadPickerFiles as loadPickerFilesSection, startGenerate as startGenerateSection, renderGenerateView as renderGenerateViewSection, genStartGenerate as genStartGenerateSection, genRunGenerate as genRunGenerateSection, genRenderResult as genRenderResultSection, genSaveToVault as genSaveToVaultSection, genExportMd as genExportMdSection, genExportWord as genExportWordSection, genExportPdf as genExportPdfSection, genExportNoAnswer as genExportNoAnswerSection, generateFromWeakPoints as generateFromWeakPointsSection, openGeneratePicker as openGeneratePickerSection } from "./sidebar/generate";
 
 export class MainSidebarView extends ItemView {
 	plugin: QuestionGeneratorPlugin;
@@ -1432,98 +1432,11 @@ export class MainSidebarView extends ItemView {
 	renderSettingsTab() { renderSettingsSection(this); }
 
 	// ===================== FILE PICKER (unified, matches exam browser) =====================
-	renderFilePicker() {
-		if (!this.innerContentEl) return;
-		const el = this.innerContentEl;
-		el.empty();
+renderFilePicker() { return renderFilePickerSection(this); }
 
-		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { this.fpSelected.clear(); this.homeView = "default"; void this.renderHomeTab(); });
+async generateFromCurrentFile() { return generateFromCurrentFileSection(this); }
 
-		el.createDiv({ text: t("生成题目"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
-		el.createDiv({ text: t("选择vault中的文档，AI根据内容生成各类题目，生成后保存到题库"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
-
-		const modeRow = el.createDiv({ attr: { style: "display:flex;gap:4px;margin-bottom:12px;" } });
-		const modes: { key: "current" | "folder"; label: string }[] = [
-			{ key: "current", label: t("当前文件") },
-			{ key: "folder", label: t("从文件夹选择") },
-		];
-		for (const m of modes) {
-			const btn = modeRow.createEl("button", { text: m.label, attr: { style: "padding:4px 12px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (this.genPickerMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-			btn.addEventListener("click", () => { this.genPickerMode = m.key; this.fpSelected.clear(); this.renderFilePicker(); });
-		}
-
-		if (this.genPickerMode === "current") {
-			const activeFile = this.app.workspace.getActiveFile();
-			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
-			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-				el.createDiv({ text: t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
-			} else {
-				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
-				info.createSpan({ text: t("当前文件：") });
-				info.createSpan({ text: activeFile.path, attr: { style: "color:var(--interactive-accent);word-break:break-all;" } });
-				info.createDiv({ text: this.fileSizeInfo(activeFile), attr: { style: "color:var(--text-muted);font-size:16px;margin-top:2px;line-height:1.5;" } });
-				const processBtn = el.createEl("button", { text: t("📝 基于当前文件生成题目"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" } });
-				processBtn.addEventListener("click", () => { void this.generateFromCurrentFile(); });
-			}
-		} else {
-			this.loadPickerFiles();
-
-			const infoEl = el.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
-			infoEl.setText(this.selectInfoText(this.fpAllFiles, this.fpSelected));
-
-			const searchInput = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:6px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);margin-bottom:8px;" } });
-
-			const toolBar = el.createDiv({ attr: { style: "margin-bottom:8px;display:flex;gap:6px;" } });
-			const toolBtn = (label: string, cb: () => void) => {
-				const b = toolBar.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-				b.addEventListener("click", cb);
-			};
-
-			const listEl = el.createDiv({ attr: { style: "max-height:420px;overflow-y:auto;" } });
-			const btnRow = el.createDiv({ attr: { style: "margin-top:12px;display:flex;gap:8px;" } });
-			const confirmBtn = btnRow.createEl("button", { text: tf("📝 生成题目（{n}个）", { n: 0 }), attr: { style: "flex:1;padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);opacity:0.5;pointer-events:none;" } });
-			confirmBtn.addEventListener("click", () => {
-				if (this.fpSelected.size === 0) { new Notice(t("请至少选择一个文件")); return; }
-				void this.generateFromSelected();
-			});
-			const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-			clearBtn.addEventListener("click", () => { this.fpSelected.clear(); rerender(); });
-			const updateConfirm = () => {
-				const size = this.fpSelected.size;
-				confirmBtn.setText(tf("📝 生成题目（{n}个）", { n: size }));
-				confirmBtn.style.opacity = size === 0 ? "0.5" : "1";
-				confirmBtn.style.pointerEvents = size === 0 ? "none" : "auto";
-			};
-			const rerender = () => { this.renderSelectTree(listEl, searchInput, infoEl, this.fpAllFiles, this.fpSelected, rerender, updateConfirm, this.fpExpanded); updateConfirm(); };
-			toolBtn(t("全选"), () => { this.fpAllFiles.forEach(f => this.fpSelected.add(f.path)); rerender(); });
-			toolBtn(t("取消全选"), () => { this.fpSelected.clear(); rerender(); });
-			searchInput.addEventListener("input", debounce(() => rerender(), SEARCH_DEBOUNCE_MS));
-			rerender();
-		}
-	}
-
-	async generateFromCurrentFile() {
-		const file = this.app.workspace.getActiveFile();
-		const ext = file ? file.extension.toLowerCase() : "";
-		if (!file || (ext !== "md" && !EXAM_SOURCE_EXTS.includes(ext))) { new Notice(t("请打开一个支持的文档（md/txt/rtf/docx/PDF/图片）")); return; }
-		const text = await this.examSourceToText(file);
-		if (!text || text.trim().length === 0) { new Notice(t("未能读取文件内容")); return; }
-		this.startGenerate(text, file.name, file.path);
-	}
-
-	async generateFromSelected() {
-		const chosen = this.fpAllFiles.filter(f => this.fpSelected.has(f.path));
-		if (chosen.length === 0) return;
-		let combined = "";
-		const paths: string[] = [];
-		for (const f of chosen) {
-			const text = await this.examSourceToText(f);
-			if (text && text.trim().length > 0) { combined += "\n\n---\n\n" + text; paths.push(f.path); }
-		}
-		if (paths.length === 0) { new Notice(t("所选文件均无法读取内容")); return; }
-		this.startGenerate(combined.trim(), tf("{n}个文档", { n: paths.length }), paths.join(","));
-	}
+async generateFromSelected() { return generateFromSelectedSection(this); }
 
 	selectInfoText(files: TFile[], selected: Set<string>): string {
 		const sel = files.filter(f => selected.has(f.path));
@@ -1647,13 +1560,7 @@ export class MainSidebarView extends ItemView {
 	}
 
 
-	loadPickerFiles() {
-		this.fpAllFiles = this.loadSourceFiles();
-		if (this.genPickerFolder) {
-			const prefix = this.genPickerFolder.endsWith("/") ? this.genPickerFolder : this.genPickerFolder + "/";
-			this.fpAllFiles = this.fpAllFiles.filter(f => f.path.startsWith(prefix));
-		}
-	}
+loadPickerFiles() { return loadPickerFilesSection(this); }
 
 
 	async extractFromExamSelected() { return extractFromExamSelectedSection(this); }
@@ -1776,291 +1683,27 @@ export class MainSidebarView extends ItemView {
 	async renderKnowledgeManager() { return renderKnowledgeManagerSection(this); }
 
 	// ===================== GENERATE (inline) =====================
-	startGenerate(sourceText: string, name: string, sourcePath: string = "") {
-		this.genSourceText = sourceText;
-		this.genFileName = name.replace(".md", "");
-		this.genSourcePath = sourcePath;
-		this.genResultText = "";
-		this.genCurrentTags = [];
-		if (this.activeSection !== "home") this.activeSection = "home";
-		this.homeView = "generate";
-		void this.renderHomeTab();
-	}
+startGenerate(sourceText: string, name: string, sourcePath: string = "") { return startGenerateSection(this, sourceText, name, sourcePath); }
 
-	renderGenerateView() {
-		if (!this.innerContentEl) return;
-		const el = this.innerContentEl;
-		el.empty();
+renderGenerateView() { return renderGenerateViewSection(this); }
 
-		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; this.homeView = "default"; void this.renderHomeTab(); });
+genStartGenerate(typeStr: string) { return genStartGenerateSection(this, typeStr); }
 
-		if (this.genResultText) {
-			this.genRenderResult();
-			return;
-		}
+async genRunGenerate(onChunk: (s: string) => void, typeStr: string, spinner: HTMLElement, subText: HTMLElement) { return genRunGenerateSection(this, onChunk, typeStr, spinner, subText); }
 
-		el.createDiv({ text: t("题目设置"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:10px;" } });
+genRenderResult() { return genRenderResultSection(this); }
 
-		const cleanedText = cleanSourceText(this.genSourceText);
-		const tokenEst = estimateTokens(cleanedText);
-		const charCount = cleanedText.length;
+async genSaveToVault() { return genSaveToVaultSection(this); }
 
-		const infoEl = el.createDiv({ attr: { style: "padding:10px 14px;margin-bottom:14px;border-radius:8px;background:var(--background-secondary);font-size:18px;line-height:1.8;" } });
-		infoEl.createDiv({ text: tf("当前文档：{name}", { name: this.genFileName }), attr: { style: "font-weight:600;" } });
-		infoEl.createDiv({ text: tf("清洗后字符数：{n}", { n: charCount.toLocaleString() }) + tf("　预估Token：{t}", { t: tokenEst.toLocaleString() }), attr: { style: "color:var(--text-muted);" } });
-		if (tokenEst > TOKEN_WARN_THRESHOLD) infoEl.createDiv({ text: t("⚠️ 内容较长，建议分段生成题目"), attr: { style: "color:var(--color-orange);margin-top:4px;" } });
+async genExportMd() { return genExportMdSection(this); }
 
-		const cfg = this.plugin.settings;
-		const savedEnabled = cfg.lastEnabledTypes.split(",").filter(Boolean);
-		const types: { label: string; key: keyof PluginSettings; count: number; enabled: boolean }[] = [
-			{ label: t("单选题"), key: "countSingle", count: cfg.countSingle, enabled: savedEnabled.length === 0 || savedEnabled.includes("single") },
-			{ label: t("多选题"), key: "countMulti", count: cfg.countMulti, enabled: savedEnabled.length === 0 || savedEnabled.includes("multi") },
-			{ label: t("判断题"), key: "countJudge", count: cfg.countJudge, enabled: savedEnabled.length === 0 || savedEnabled.includes("judge") },
-			{ label: t("填空题"), key: "countBlank", count: cfg.countBlank, enabled: savedEnabled.length === 0 || savedEnabled.includes("blank") },
-			{ label: t("简答题"), key: "countEssay", count: cfg.countEssay, enabled: savedEnabled.length === 0 || savedEnabled.includes("essay") },
-		];
-		const activeTypes = types.filter(t => t.count > 0);
+async genExportWord() { return genExportWordSection(this); }
 
-		if (activeTypes.length === 1) {
-			const only = activeTypes[0]!;
-			el.createDiv({ text: tf("题型：{label} {n} 题", { label: only.label, n: only.count }), attr: { style: "font-size:18px;margin-bottom:14px;padding:8px 12px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
-		} else {
-			const toggleArea = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:6px;margin-bottom:14px;" } });
-			for (const tp of types) {
-				const row = toggleArea.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--background-modifier-border);" } });
-				const cb = row.createEl("input", { attr: { type: "checkbox" } });
-				cb.checked = tp.enabled;
-				row.createSpan({ text: tp.label, attr: { style: "min-width:60px;font-size:18px;" } });
-				const countInput = row.createEl("input", { attr: { type: "number", min: "0", max: "50", value: String(tp.count), style: "width:50px;padding:4px 6px;border-radius:4px;border:1px solid var(--background-modifier-border);text-align:center;font-size:18px;" } });
-				countInput.addEventListener("change", () => { tp.count = parseInt(countInput.value) || 0; (cfg[tp.key] as number) = tp.count; });
-				row.createSpan({ text: t("题"), attr: { style: "font-size:17px;color:var(--text-muted);" } });
-				cb.addEventListener("change", () => { tp.enabled = cb.checked; });
-			}
-		}
+async genExportPdf() { return genExportPdfSection(this); }
 
-		el.createDiv({ text: t("知识点标签（逗号分隔）："), attr: { style: "margin-bottom:4px;font-size:18px;" } });
-		const tagsInput = el.createEl("input", { attr: { type: "text", placeholder: t("例如：微积分, 导数"), value: cfg.lastTags, style: "width:100%;padding:6px;margin-bottom:14px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;" } });
+async genExportNoAnswer() { return genExportNoAnswerSection(this); }
 
-		const autoSaveRow = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin-bottom:14px;" } });
-		const autoSaveCb = autoSaveRow.createEl("input", { attr: { type: "checkbox" } });
-		autoSaveCb.checked = cfg.autoSave;
-		autoSaveCb.addEventListener("change", () => { cfg.autoSave = autoSaveCb.checked; });
-		autoSaveRow.createSpan({ text: t("生成后自动保存到题库"), attr: { style: "font-size:18px;" } });
-
-		const startBtn = el.createDiv({ attr: { style: "text-align:center;" } });
-		const sb = startBtn.createEl("button", { text: t("开始生成"), attr: { class: "mod-cta", style: "padding:8px 24px;border-radius:4px;cursor:pointer;font-size:20px;" } });
-		sb.addEventListener("click", () => {
-			const enabledTypes = types.filter(t => t.enabled && t.count > 0);
-			if (enabledTypes.length === 0) { new Notice(t("请至少选择一种题型且数量大于0")); return; }
-			this.genCurrentTags = tagsInput.value.split(",").map(s => s.trim()).filter(Boolean);
-			cfg.lastTags = tagsInput.value;
-			cfg.lastEnabledTypes = types.filter(t => t.enabled).map(t => t.key.replace("count", "").toLowerCase()).join(",");
-			void this.plugin.saveSettings();
-			const counts: string[] = [];
-			for (const t of enabledTypes) { if (t.count > 0) counts.push(t.label + t.count); }
-			this.genStartGenerate(counts.join("、"));
-		});
-	}
-
-	genStartGenerate(typeStr: string) {
-		const el = this.innerContentEl;
-		if (!el) return;
-		el.empty();
-
-		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; this.genResultText = ""; this.renderGenerateView(); });
-
-		const progressEl = el.createDiv({ attr: { style: "text-align:center;padding:14px;margin-bottom:10px;border-radius:8px;background:var(--background-secondary);" } });
-		const spinner = progressEl.createDiv({ text: t("⏳ 正在生成试题..."), attr: { style: "font-size:20px;font-weight:600;line-height:1.6;" } });
-		const subText = progressEl.createDiv({ text: t("预计需要 10-60 秒"), attr: { style: "font-size:17px;color:var(--text-muted);margin-top:4px;" } });
-
-		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;" } });
-		const update = (txt: string) => { this.genResultText = txt; textArea.value = txt; textArea.scrollTop = textArea.scrollHeight; };
-
-		const btnRow = el.createDiv({ attr: { style: "margin-top:8px;display:flex;gap:6px;" } });
-		const cancelBtn = btnRow.createEl("button", { text: t("⏹ 中止"), attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
-		cancelBtn.addEventListener("click", () => { this.cancelAI(); this.genIsGenerating = false; spinner.setText(t("已中止")); subText.setText(t("已获取的内容已保留")); });
-
-		void this.genRunGenerate(update, typeStr, spinner, subText);
-	}
-
-	async genRunGenerate(onChunk: (s: string) => void, typeStr: string, spinner: HTMLElement, subText: HTMLElement) {
-		if (this.genIsGenerating) { new Notice(t("正在生成中，请等待完成")); return; }
-		const cfg = this.plugin.settings;
-		const existingTags = await this.plugin.loadExistingKnowledgeTags();
-		const prompt = buildGeneratePrompt(this.genSourceText, typeStr, existingTags);
-		let full = "";
-		this.resetAI();
-		this.genIsGenerating = true;
-
-		try {
-			full = await this.callAIWithPrompt(prompt, undefined, { system: t("你是一个出题助手，严格按照指定格式输出题目。") });
-
-			if (!full) { onChunk(t("接口返回内容为空，请检查模型名称和接口地址配置是否正确。")); return; }
-
-			const { tags: aiTags, cleanText } = parseAITagsFromResult(full);
-			full = fixSequentialNumbers(cleanText);
-			onChunk(full);
-
-			const questions = parseQuestions(full);
-			const gradableCount = questions.filter(q => q.type !== "essay" && q.type !== "blank").length;
-			spinner.setText(t("✅ 生成完成"));
-			const tagInfo = aiTags.length > 0 ? " | " + tf("知识点：{tags}", { tags: aiTags.join(", ") }) : "";
-			subText.setText(tf("共解析出 {n} 题（客观题 {m} 题）", { n: questions.length, m: gradableCount }) + tagInfo + (questions.length === 0 ? " " + t("⚠️ 请检查AI输出格式") : ""));
-
-			const entry: HistoryEntry = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), timestamp: Date.now(), fileName: this.genFileName, sourceSnippet: this.genSourceText.slice(0, MAX_HISTORY_SNIPPET), resultText: full, sourcePath: this.genSourcePath };
-			await this.plugin.addHistory(entry);
-			if (cfg.autoSave && full) await this.genSaveToVault();
-		} catch (err) {
-			if ((err as Error).name === "AbortError") {
-				spinner.setText(t("⚠️ 已中止"));
-				subText.setText(this.aiCancelled ? t("本次生成已停止，未保存任何内容") : t("请求超时（3分钟）"));
-				return;
-			}
-			spinner.setText(t("❌ 生成失败"));
-			onChunk(tf("接口调用失败：{msg}", { msg: (err as Error).message }) + t("\n\n请检查：\n1. 接口地址\n2. API服务是否运行\n3. 模型名称"));
-		} finally {
-			this.genIsGenerating = false;
-		}
-	}
-
-	genRenderResult() {
-		if (!this.innerContentEl) return;
-		const el = this.innerContentEl;
-		el.empty();
-
-		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
-		backBtn.addEventListener("click", () => { this.genResultText = ""; this.renderGenerateView(); });
-
-		el.createDiv({ text: t("生成结果"), attr: { style: "font-size:20px;font-weight:bold;margin-bottom:8px;" } });
-		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;" } });
-		textArea.value = this.genResultText;
-		textArea.addEventListener("input", () => { this.genResultText = textArea.value; });
-
-		const btnRow = el.createDiv({ attr: { style: "margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;" } });
-		const actBtn = (label: string, cb: () => void) => {
-			const b = btnRow.createEl("button", { text: label, attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
-			b.addEventListener("click", cb);
-		};
-		actBtn(t("导出MD"), () => { void this.genExportMd(); });
-		actBtn(t("导出Word"), () => { void this.genExportWord(); });
-		actBtn(t("导出PDF"), () => { void this.genExportPdf(); });
-		actBtn(t("无答案版"), () => { void this.genExportNoAnswer(); });
-
-		const btnRow2 = el.createDiv({ attr: { style: "margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;" } });
-		const ctaBtn = (label: string, cb: () => void) => {
-			const b = btnRow2.createEl("button", { text: label, attr: { class: "mod-cta", style: "padding:5px 14px;border-radius:4px;cursor:pointer;font-size:18px;" } });
-			b.addEventListener("click", cb);
-		};
-		ctaBtn(t("保存到知识库"), () => { void (async () => { await this.genSaveToVault(); })(); });
-		actBtn(t("开始答题"), () => { if (!this.genResultText) { new Notice(t("请先生成试题")); return; } this.startAnswer(this.genResultText, this.genFileName, this.genSourcePath); });
-	}
-
-	async genSaveToVault() {
-		if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
-		this.resetAI();
-		try {
-			await ensureFolder(this.app, this.plugin.rootPath(this.plugin.settings.questionFolder));
-			const dateStr = new Date().toISOString().slice(0, 10);
-			const autoTags = await this.aiSuggestTags(this.genResultText);
-			const allTags = ["题目", ...this.genCurrentTags, ...autoTags.filter(t => !this.genCurrentTags.includes(t))];
-			const sourceLink = this.genFileName ? "[[" + this.genFileName + "]]" : "";
-			const qIvls = parseReviewIntervals(this.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS);
-			const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + qIvls[0]!);
-			const fm = buildFM({ source: sourceLink, sourcePath: this.genSourcePath, date: dateStr, tags: allTags, nextReview: nextReviewDate.toISOString().slice(0, 10), interval: qIvls[0]!, correctCount: 0, wrongCount: 0 });
-			const kTags = knowledgeTags(allTags);
-			const knowledgeLinks = kTags.length > 0 ? "\n\n---\n\n**知识点：** " + kTags.map(t => "[[" + t + "]]").join(" ") + "\n" : "";
-			const content = fm + normalizeExamContent(this.genResultText) + knowledgeLinks;
-			const fileName = safeName(this.genFileName) + "_试题_" + dateStr + ".md";
-			if (isAbs(this.plugin.rootPath(this.plugin.settings.questionFolder))) {
-				const filePath = joinPath(this.plugin.rootPath(this.plugin.settings.questionFolder), fileName);
-				try { writeFileStr(filePath, content); }
-				catch { writeFileStr(joinPath(this.plugin.rootPath(this.plugin.settings.questionFolder), safeName(this.genFileName) + "_试题_" + Date.now() + ".md"), content); }
-			} else {
-				const filePath = this.plugin.rootPath(this.plugin.settings.questionFolder) + "/" + fileName;
-				try { await this.app.vault.create(filePath, content); }
-				catch { await this.app.vault.create(this.plugin.rootPath(this.plugin.settings.questionFolder) + "/" + safeName(this.genFileName) + "_试题_" + Date.now() + ".md", content); }
-			}
-			new Notice(tf("已保存到 {path}", { path: this.plugin.rootPath(this.plugin.settings.questionFolder) }));
-			this.plugin.emitDataChanged();
-			this.syncToKnowledgeIndex(allTags, fileName.replace(/\.md$/, ""), joinPath(this.plugin.rootPath(this.plugin.settings.questionFolder), fileName), "题目");
-		} catch (err) { new Notice(tf("保存失败：{msg}", { msg: (err as Error).message })); }
-	}
-
-	async genExportMd() {
-		try {
-			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
-			
-			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
-			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
-			fs.writeFileSync(r.filePath, "# " + this.genFileName + t(" 配套试题") + "\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + stripAnswerSummarySection(this.genResultText), "utf-8");
-			new Notice(t("Md已保存"));
-		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
-	}
-
-	async genExportWord() {
-		try {
-			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
-			
-			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.docx", filters: [{ name: "Word", extensions: ["docx"] }] });
-			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
-			const children = buildWordParagraphs(this.genResultText, this.genFileName + t(" 配套试题"), this.genFileName + " " + dateStr);
-			const doc = new Document({ sections: [{ properties: {}, children }] });
-			const buffer = await Packer.toBuffer(doc);
-			fs.writeFileSync(r.filePath, Buffer.from(buffer));
-			new Notice(t("Word已保存"));
-		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
-	}
-
-	async genExportPdf() {
-		try {
-			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
-			
-			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题.pdf", filters: [{ name: "PDF", extensions: ["pdf"] }] });
-			if (r.canceled || !r.filePath) return;
-			await exportPdfDirect(r.filePath, this.genResultText, this.genFileName + t(" 配套试题"), this.genFileName);
-			new Notice(t("PDF已保存"));
-		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
-	}
-
-	async genExportNoAnswer() {
-		try {
-			if (!this.genResultText) { new Notice(t("还没有生成试题内容")); return; }
-			const noAnswerText = stripAnswersForExport(this.genResultText);
-			
-			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: this.genFileName + "_试题_无答案.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
-			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
-			fs.writeFileSync(r.filePath, "# " + this.genFileName + t(" 配套试题（无答案版）") + "\n\n> 来源：" + this.genFileName + "　|　日期：" + dateStr + "\n\n" + noAnswerText, "utf-8");
-			new Notice(t("无答案版已保存"));
-		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
-	}
-
-	async generateFromWeakPoints() {
-		const wp = await this.plugin.getWeakPoints();
-		if (wp.length === 0) { new Notice(t("暂无薄弱知识点数据")); return; }
-		const notes = await this.plugin.loadAllWrongNotes();
-		const sources: string[] = [];
-		const paths: string[] = [];
-		for (const note of notes) {
-			const srcName = note.sourceFile.replace(/\[\[|\]\]/g, "");
-			const src = this.app.vault.getFiles().find(f => f.basename === srcName || f.name === srcName);
-			if (src) { sources.push(await this.app.vault.read(src)); paths.push(src.path); }
-			else if (isAbs(this.plugin.rootPath(this.plugin.settings.questionFolder))) {
-				const qDir = this.plugin.rootPath(this.plugin.settings.questionFolder);
-				if (fs.existsSync(qDir)) { for (const f of fs.readdirSync(qDir)) { if (f.includes(srcName) && f.endsWith(".md")) { sources.push(readFileStr(joinPath(qDir, f))); paths.push(joinPath(qDir, f)); break; } } }
-			}
-		}
-		if (sources.length === 0) { new Notice("没有可用的源文件"); return; }
-		const isEn = getLanguage() === "en";
-		const weakPrompt = isEn
-			? "[Question requirements - focus on the following weak knowledge points]\n" + wp.map(w => "- " + w.tag + " (wrong " + w.count + " times)").join("\n") + "\n\nFor each weak point above, write at least 2-3 questions.\n\n"
-			: "【出题要求 - 请重点关注以下薄弱知识点】\n" + wp.map(w => "- " + w.tag + "（错题" + w.count + "次）").join("\n") + "\n\n对于上述薄弱知识点，每类至少出2-3题。\n\n";
-		this.startGenerate(weakPrompt + sources.join("\n\n---\n\n"), t("薄弱点定向生成"), paths.join(","));
-	}
+async generateFromWeakPoints() { return generateFromWeakPointsSection(this); }
 
 	// ===================== ANSWER (inline) =====================
 	startAnswer(resultText: string, sourceName: string, sourcePath: string = "") { startAnswerSection(this, resultText, sourceName, sourcePath); }
@@ -2084,14 +1727,7 @@ export class MainSidebarView extends ItemView {
 
 	renderHistoryView() { renderHistorySection(this); }
 
-	openGeneratePicker(folder?: string) {
-		this.genPickerMode = folder ? "folder" : "current";
-		this.genPickerFolder = folder ? folder.replace(/\\/g, "/") : "";
-		this.fpSelected.clear();
-		this.fpAllFiles = [];
-		this.homeView = "filePicker";
-		void this.renderHomeTab();
-	}
+openGeneratePicker(folder?: string) { return openGeneratePickerSection(this, folder); }
 
 	async openCurrentFileExtract(file?: TFile) { return openCurrentFileExtractSection(this, file); }
 
