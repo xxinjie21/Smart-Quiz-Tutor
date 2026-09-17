@@ -449,4 +449,8 @@ export const en: Record<keyof typeof zh, string> = {
 	"你有 {n} 道错题待复习，点击开始": "You have {n} wrong answers due — click to start",
 	"已迁移 {n} 条旧错题到 {folder}": "Migrated {n} old wrong answers to {folder}",
 	"无法连接 {url}，请确认服务已启动、接口地址与 API Key 正确": "Cannot reach {url} — check that the service is running and the URL / API key are correct",
+	"⚠️ 输出格式不达标，正在重试一次...\n\n": "⚠️ Output format failed validation; retrying once...\n\n",
+	"上次输出不符合格式要求。请严格按格式重新输出：题型用 ## 开头，每题用 **编号.** 开头，答案行以「答案：」开头，多要点用 (1)(2)(3)。": "The previous output did not follow the required format. Re-output strictly: sections start with ##, each question starts with **number.**, answer lines start with \"Answer:\", and multiple points use (1)(2)(3).",
+	"重试后接口仍返回空，请检查模型与接口配置。": "Retry still returned empty. Check your model and endpoint config.",
+	"搜索错题（文件名/来源/知识点/内容）...": "Search wrong answers (filename / source / knowledge point / content)...",
 };

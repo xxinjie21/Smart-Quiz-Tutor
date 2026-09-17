@@ -329,6 +329,21 @@ export function mergeExamChunks(text: string): string {
 	return result;
 }
 
+export interface GeneratedValidation {
+	ok: boolean;
+	sectionCount: number;
+	questionCount: number;
+	hasAnswer: boolean;
+}
+
+/** 对 AI 生成的题目文本做基础校验（有无题型标题/题号/答案），作为自动重试的依据。 */
+export function validateGenerated(text: string): GeneratedValidation {
+	const sectionCount = (text.match(/^#{1,4}\s+\S+/gm) || []).length;
+	const questionCount = (text.match(/\*\*\d+\.\*\*/g) || []).length;
+	const hasAnswer = /(?:答案|解析|Answer|Explanation)[：:]/i.test(text);
+	return { ok: sectionCount > 0 && questionCount >= 1 && hasAnswer, sectionCount, questionCount, hasAnswer };
+}
+
 export function parseAITagsFromResult(text: string): { tags: string[]; cleanText: string } {
 	const lines = text.split("\n");
 	const lastLines = lines.slice(-5);

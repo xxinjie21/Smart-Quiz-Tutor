@@ -8,6 +8,7 @@ import { debounce } from "../../utils/debounce";
 import { isAbs, isExcludedPath, ensureFolder, readFileStr, joinPath, writeFileStr } from "../../utils/fs-utils";
 import { safeName } from "../../utils/text";
 import { buildFM, knowledgeTags } from "../../utils/frontmatter";
+import { matchQuery } from "../../utils/list";
 import { t, tf } from "../../i18n/index";
 
 export async function renderNotesTab(view: MainSidebarView) {
@@ -72,6 +73,7 @@ export async function renderNotesTab(view: MainSidebarView) {
 		}
 
 		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: t("搜索文件名..."), style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:8px;" } });
+		searchEl.value = view.listQuery || "";
 		view.adminBatchUpdate = view.renderAdminBatchBar(el, fileData.map(fd => fd.file.path), () => {
 			const selected = fileData.filter(fd => view.adminSelected.has(fd.file.path)).map(fd => fd.file.path);
 			void view.adminDeleteFiles(selected, folder, () => void view.renderNotesTab());
@@ -84,7 +86,7 @@ export async function renderNotesTab(view: MainSidebarView) {
 		const renderList = (query: string) => {
 			listEl.empty();
 			const q = query.toLowerCase();
-			const filtered = q ? fileData.filter(fd => fd.file.name.toLowerCase().includes(q) || fd.file.basename.toLowerCase().includes(q) || fd.source.toLowerCase().includes(q)) : fileData;
+			const filtered = q ? fileData.filter(fd => matchQuery(q, [fd.file.name, fd.file.basename, fd.file.path, fd.source, ...fd.tags])) : fileData;
 
 			const renderFileItem = (container: HTMLElement, fd: { file: TFile; tags: string[]; source: string }) => {
 				const file = fd.file;
@@ -182,7 +184,7 @@ export async function renderNotesTab(view: MainSidebarView) {
 				for (const fd of sorted) renderFileItem(listEl, fd);
 			}
 		};
-		searchEl.addEventListener("input", debounce(() => renderList(searchEl.value), SEARCH_DEBOUNCE_MS));
+		searchEl.addEventListener("input", debounce(() => { view.listQuery = searchEl.value; renderList(searchEl.value); }, SEARCH_DEBOUNCE_MS));
 		renderList("");
 }
 

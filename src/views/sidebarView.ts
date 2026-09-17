@@ -93,6 +93,7 @@ export class MainSidebarView extends ItemView {
 	notePickerActive = false;
 	reviewSortBy: "default" | "source" | "tag" | "time" = "default";
 	reviewFilterType: "all" | "wrong" | "question" | "note" = "all";
+	listQuery = "";
 
 	// Tagger state
 	taggerMode: "current" | "folder" = "current";

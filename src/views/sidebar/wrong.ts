@@ -4,13 +4,15 @@ import * as fs from "fs";
 
 import type { MainSidebarView } from "../sidebarView";
 import type { WrongAnswerNote } from "../../types";
-import { MAX_UNTAGGED_DISPLAY } from "../../constants";
+import { MAX_UNTAGGED_DISPLAY, SEARCH_DEBOUNCE_MS } from "../../constants";
 import { isDueForReview } from "../../utils/review";
+import { debounce } from "../../utils/debounce";
 import { stripAnswerSummarySection } from "../../utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "../../utils/exporter";
 import { getElectronRemote } from "../../utils/electron";
 import { isAbs, joinPath, deleteFileAbs, readFileStr, daysUntil } from "../../utils/fs-utils";
 import { knowledgeTags } from "../../utils/frontmatter";
+import { matchQuery } from "../../utils/list";
 import { t, tf } from "../../i18n/index";
 
 export async function renderWrongTab(view: MainSidebarView) {
@@ -27,8 +29,12 @@ export async function renderWrongList(view: MainSidebarView) {
 		const el = view.innerContentEl;
 		el.empty();
 
-		const notes = await view.plugin.loadAllWrongNotes();
-		view.wrongNotes = notes;
+		const allNotes = await view.plugin.loadAllWrongNotes();
+		const query = (view.listQuery || "").trim();
+		const notes = query
+			? allNotes.filter(n => matchQuery(query, [n.baseName, n.sourceFile, n.sourcePath, ...n.tags, n.resultText.slice(0, 300)]))
+			: allNotes;
+		view.wrongNotes = allNotes;
 		const dueNotes = notes.filter((n: WrongAnswerNote) => isDueForReview(n));
 
 		const statsRow = el.createDiv({ attr: { style: "display:flex;gap:6px;margin-bottom:10px;font-size:18px;" } });
@@ -46,6 +52,10 @@ export async function renderWrongList(view: MainSidebarView) {
 			const mb = modeBar.createEl("button", { text: m.label, attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (view.wrongSortMode === m.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
 			mb.addEventListener("click", () => { view.wrongSortMode = m.key; void view.renderWrongTab(); });
 		}
+
+		const searchEl = el.createEl("input", { attr: { type: "text", placeholder: t("搜索错题（文件名/来源/知识点/内容）..."), style: "width:100%;padding:5px 8px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;margin-bottom:10px;" } });
+		searchEl.value = view.listQuery || "";
+		searchEl.addEventListener("input", debounce(() => { view.listQuery = searchEl.value; void view.renderWrongTab(); }, SEARCH_DEBOUNCE_MS));
 
 		if (dueNotes.length > 0) {
 			const dueBtn = el.createDiv({ attr: { style: "padding:10px;margin-bottom:10px;border-radius:6px;border:2px solid var(--interactive-accent);background:color-mix(in srgb, var(--interactive-accent) 5%, transparent);cursor:pointer;text-align:center;font-weight:600;font-size:19px;" } });

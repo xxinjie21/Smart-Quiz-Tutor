@@ -13,7 +13,7 @@ import { debounce } from "../../utils/debounce";
 import { stripAnswerSummarySection, normalizeExamContent, fixSequentialNumbers } from "../../utils/layout";
 import { buildWordParagraphs, exportPdfDirect } from "../../utils/exporter";
 import { getElectronRemote } from "../../utils/electron";
-import { buildGeneratePrompt, parseAITagsFromResult } from "../../services/questionService";
+import { buildGeneratePrompt, parseAITagsFromResult, validateGenerated } from "../../services/questionService";
 import { buildFM, knowledgeTags } from "../../utils/frontmatter";
 import { t, tf, getLanguage } from "../../i18n/index";
 
@@ -240,6 +240,16 @@ export async function genRunGenerate(view: MainSidebarView, onChunk: (s: string)
 			full = await view.callAIWithPrompt(prompt, undefined, { system: t("你是一个出题助手，严格按照指定格式输出题目。") });
 
 			if (!full) { onChunk(t("接口返回内容为空，请检查模型名称和接口地址配置是否正确。")); return; }
+
+			if (!validateGenerated(full).ok) {
+				onChunk(t("⚠️ 输出格式不达标，正在重试一次...\n\n"));
+				full = await view.callAIWithPrompt(
+					prompt + "\n\n上次输出不符合格式要求。请严格按格式重新输出：题型用 ## 开头，每题用 **编号.** 开头，答案行以「答案：」开头，多要点用 (1)(2)(3)。",
+					undefined,
+					{ system: t("你是一个出题助手，严格按照指定格式输出题目。") },
+				);
+				if (!full) { onChunk(t("重试后接口仍返回空，请检查模型与接口配置。")); return; }
+			}
 
 			const { tags: aiTags, cleanText } = parseAITagsFromResult(full);
 			full = fixSequentialNumbers(cleanText);
