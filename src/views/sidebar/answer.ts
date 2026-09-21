@@ -9,6 +9,9 @@ import { safeName } from "../../utils/text";
 import { buildGradePrompt } from "../../services/questionService";
 import { isAbs, writeFileStr, joinPath, ensureFolder } from "../../utils/fs-utils";
 import { t, tf } from "../../i18n/index";
+import { localDateStr } from "../../utils/date";
+import { clampEase } from "../../utils/sm2";
+import { backButton } from "./shared/ui";
 
 export function startAnswer(view: MainSidebarView, resultText: string, sourceName: string, sourcePath: string = "") {
 	view.answerResultText = resultText;
@@ -28,8 +31,7 @@ export function renderAnswerView(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
-	backBtn.addEventListener("click", () => { view.homeView = "default"; void view.renderHomeTab(); });
+	backButton(el, () => { view.homeView = "default"; void view.renderHomeTab(); });
 
 	if (view.answerQuestions.length === 0) {
 		el.createEl("p", { text: t("未能解析出可答题的题目。"), attr: { style: "color:var(--text-muted);padding:20px 0;" } });
@@ -44,7 +46,7 @@ export function renderAnswerView(view: MainSidebarView) {
 
 	for (const q of view.answerQuestions) {
 		const isGradable = q.type === "single" || q.type === "multi" || q.type === "judge";
-		const qEl = el.createDiv({ cls: "qg-question-card", attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;" } });
+		const qEl = el.createDiv({ cls: "qg-list-item", attr: { style: "border:1px solid var(--background-modifier-border);border-radius:8px;padding:12px 14px;margin-bottom:10px;" } });
 
 		const headerRow = qEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:8px;" } });
 		headerRow.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;padding:2px 6px;border-radius:4px;background:var(--interactive-accent);color:var(--text-on-accent);font-weight:500;" } });
@@ -94,8 +96,7 @@ function answerSubmit(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 重新答题"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
-	backBtn.addEventListener("click", () => { view.answerAnswers = new Map(); view.answerWrongChecked = new Set(); renderAnswerView(view); });
+	backButton(el, () => { view.answerAnswers = new Map(); view.answerWrongChecked = new Set(); renderAnswerView(view); }, t("← 重新答题"));
 
 	const gradable = view.answerQuestions.filter(q => q.type === "single" || q.type === "multi" || q.type === "judge");
 	const nonGradable = view.answerQuestions.filter(q => q.type === "blank" || q.type === "essay");
@@ -116,7 +117,7 @@ function answerSubmit(view: MainSidebarView) {
 
 	const scoreCard = el.createDiv({ attr: { style: "text-align:center;padding:16px;margin-bottom:14px;border-radius:8px;border:1px solid var(--background-modifier-border);background:var(--background-secondary);" } });
 	if (score >= 0) {
-		const scoreColor = score >= 80 ? "var(--color-green)" : score >= 60 ? "var(--color-yellow)" : "var(--color-red)";
+		const scoreColor = score >= 80 ? "var(--qg-success)" : score >= 60 ? "var(--color-yellow)" : "var(--qg-danger)";
 		scoreCard.createDiv({ text: tf("{n} 分", { n: score }), attr: { style: "font-size:36px;font-weight:bold;color:" + scoreColor + ";line-height:1.2;" } });
 		scoreCard.createDiv({ text: tf("客观题 {n} 题：正确 {c} / 错误 {w}", { n: totalGradable, c: correct, w: wrongList.length }), attr: { style: "color:var(--text-muted);margin-top:6px;font-size:19px;" } });
 	}
@@ -150,7 +151,7 @@ function answerSubmit(view: MainSidebarView) {
 			if (q.type === "single" || q.type === "judge") isCorrect = userAnswer.toUpperCase() === q.answer.toUpperCase();
 			else if (q.type === "multi") isCorrect = userAnswer.split("").sort().join("").toUpperCase() === q.answer.toUpperCase();
 
-			const borderColor = isCorrect ? "var(--color-green)" : "var(--color-red)";
+			const borderColor = isCorrect ? "var(--qg-success)" : "var(--qg-danger)";
 			const qEl = el.createDiv({ attr: { style: "border:1px solid " + borderColor + ";border-radius:8px;padding:10px 12px;margin-bottom:8px;" } });
 
 			const qHeader = qEl.createDiv({ attr: { style: "display:flex;align-items:center;gap:6px;margin-bottom:6px;" } });
@@ -159,7 +160,7 @@ function answerSubmit(view: MainSidebarView) {
 			wCb.checked = view.answerWrongChecked.has(q.number);
 			wCb.addEventListener("change", () => { wCb.checked ? view.answerWrongChecked.add(q.number) : view.answerWrongChecked.delete(q.number); updateSelectBtn(); });
 			checkboxes.push(wCb);
-			qHeader.createSpan({ text: isCorrect ? t("✓ 正确") : t("✗ 错误"), attr: { style: "font-size:17px;padding:2px 6px;border-radius:4px;font-weight:600;" + (isCorrect ? "background:color-mix(in srgb, var(--color-green) 15%, transparent);color:var(--color-green);" : "background:color-mix(in srgb, var(--color-red) 15%, transparent);color:var(--color-red);") } });
+			qHeader.createSpan({ text: isCorrect ? t("✓ 正确") : t("✗ 错误"), attr: { style: "font-size:17px;padding:2px 6px;border-radius:4px;font-weight:600;" + (isCorrect ? "background:color-mix(in srgb, var(--qg-success) 15%, transparent);color:var(--qg-success);" : "background:color-mix(in srgb, var(--qg-danger) 15%, transparent);color:var(--qg-danger);") } });
 			qHeader.createSpan({ text: typeLabels[q.type], attr: { style: "font-size:16px;color:var(--text-muted);" } });
 
 			const qTextRow = qEl.createDiv({ attr: { style: "font-weight:600;line-height:1.7;font-size:19px;margin-bottom:6px;" } });
@@ -170,8 +171,8 @@ function answerSubmit(view: MainSidebarView) {
 				const isUserChoice = q.type === "multi" ? userAnswer.includes(opt.label) : opt.label === userAnswer;
 				const isCorrectOpt = q.type === "multi" ? q.answer.includes(opt.label) : opt.label === q.answer;
 				let optStyle = "padding:2px 0;font-size:19px;line-height:1.5;";
-				if (isCorrectOpt) optStyle += "color:var(--color-green);font-weight:600;";
-				else if (isUserChoice && !isCorrect) optStyle += "color:var(--color-red);text-decoration:line-through;";
+				if (isCorrectOpt) optStyle += "color:var(--qg-success);font-weight:600;";
+				else if (isUserChoice && !isCorrect) optStyle += "color:var(--qg-danger);text-decoration:line-through;";
 				qEl.createDiv({ text: opt.label + ". " + opt.text, attr: { style: optStyle } });
 			}
 
@@ -214,7 +215,7 @@ function answerSubmit(view: MainSidebarView) {
 				const refAns = qEl.createDiv({ attr: { style: "margin-top:6px;" } });
 				refAns.createDiv({ text: t("参考答案"), attr: { style: "font-size:17px;color:var(--qg-success);font-weight:700;margin-bottom:2px;" } });
 				const steps = splitAnswerContent(q.answer);
-				for (const step of steps) refAns.createDiv({ text: step, attr: { style: "padding:3px 10px;border-radius:4px;background:color-mix(in srgb, var(--color-green) 8%, transparent);font-size:19px;line-height:1.7;" } });
+				for (const step of steps) refAns.createDiv({ text: step, attr: { style: "padding:3px 10px;border-radius:4px;background:color-mix(in srgb, var(--qg-success) 8%, transparent);font-size:19px;line-height:1.7;" } });
 			}
 			if (q.explanation) {
 				const expEl = qEl.createDiv({ cls: "qg-exp-top" });
@@ -233,7 +234,7 @@ function answerSubmit(view: MainSidebarView) {
 							const res = await view.callAIWithPrompt(buildGradePrompt(q, userAnswer));
 							gradeDiv.createDiv({ text: res || t("批改失败：返回为空"), attr: { style: "margin-top:6px;padding:6px 10px;border-radius:4px;background:var(--background-secondary);font-size:16px;line-height:1.6;white-space:pre-wrap;" } });
 						} catch (err) {
-							gradeDiv.createDiv({ text: tf("批改失败：{msg}", { msg: (err as Error).message }), attr: { style: "margin-top:6px;color:var(--color-red);font-size:16px;" } });
+							gradeDiv.createDiv({ text: tf("批改失败：{msg}", { msg: (err as Error).message }), attr: { style: "margin-top:6px;color:var(--qg-danger);font-size:16px;" } });
 						} finally {
 							gradeBtn.setText(t("🤖 AI 批改"));
 							gradeBtn.disabled = false;
@@ -312,10 +313,10 @@ async function answerSaveWrongToBook(view: MainSidebarView, wrongList: ParsedQue
 	const knowledgeLinks = buildKnowledgeLinks(tags);
 	try {
 		await ensureFolder(view.app, view.plugin.rootPath(view.plugin.settings.wrongBookFolder));
-		const dateStr = new Date().toISOString().slice(0, 10);
+		const dateStr = localDateStr();
 		const sourceLink = view.answerSourceName ? "[[" + view.answerSourceName + "]]" : "";
 		const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-		const fm = buildFM({ source: sourceLink, sourcePath: view.answerSourcePath, date: dateStr, tags, note: noteText || "答题模式加入（" + wrongList.length + "题错误）", nextReview: tomorrow.toISOString().slice(0, 10), interval: 1, correctCount: 0, wrongCount: wrongList.length });
+		const fm = buildFM({ source: sourceLink, sourcePath: view.answerSourcePath, date: dateStr, tags, note: noteText || "答题模式加入（" + wrongList.length + "题错误）", nextReview: localDateStr(tomorrow), interval: 1, correctCount: 0, wrongCount: wrongList.length, easeFactor: clampEase(view.plugin.settings.wrongEaseFactor), repetitions: 0, lapses: wrongList.length });
 		const content = fm + normalizeExamContent(wrongText) + knowledgeLinks;
 		const fileName = safeName(view.answerSourceName) + "_错题_" + dateStr + ".md";
 		if (isAbs(view.plugin.rootPath(view.plugin.settings.wrongBookFolder))) {

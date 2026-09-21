@@ -1,4 +1,5 @@
 import { Notice, TFile, TFolder } from "obsidian";
+import { localDateStr } from "../../utils/date";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -28,7 +29,7 @@ export async function getActivityData(view: MainSidebarView) {
 						if (isExcludedPath(fp, excludeCfg)) continue;
 						try {
 							const stat = fs.statSync(fp);
-							const day = new Date(stat.mtimeMs).toISOString().slice(0, 10);
+							const day = localDateStr(new Date(stat.mtimeMs));
 							activity[day] = (activity[day] || 0) + 1;
 						} catch { /* skip */ }
 					}
@@ -36,7 +37,7 @@ export async function getActivityData(view: MainSidebarView) {
 					const prefix = folder.endsWith("/") ? folder : folder + "/";
 					const files = view.app.vault.getFiles().filter(f => f.path.startsWith(prefix) && f.extension === "md" && !exclPrefixes.some(e => f.path.startsWith(e)) && !isExcludedPath(f.path, excludeCfg));
 					for (const child of files) {
-						const day = new Date(child.stat.mtime).toISOString().slice(0, 10);
+						const day = localDateStr(new Date(child.stat.mtime));
 						activity[day] = (activity[day] || 0) + 1;
 					}
 				}
@@ -48,7 +49,7 @@ export async function getActivityData(view: MainSidebarView) {
 export function renderHeatmap(view: MainSidebarView, container: HTMLElement, activity: Record<string, number>, year: string) {
 		container.empty();
 		const today = new Date();
-		const todayStr = today.toISOString().slice(0, 10);
+		const todayStr = localDateStr(today);
 
 		// GitHub contribution-graph metrics: 12px cells, 2px gaps
 		const CELL = 12;
@@ -156,7 +157,7 @@ export function renderHeatmap(view: MainSidebarView, container: HTMLElement, act
 				const d = new Date(startDate);
 				d.setDate(d.getDate() + col * 7 + row);
 				if (yearNum > 0 && d.getFullYear() !== yearNum) continue;
-				const ds = d.toISOString().slice(0, 10);
+				const ds = localDateStr(d);
 				if (ds > todayStr) continue;
 				const val = activity[ds] || 0;
 				const level = getLevel(val);
@@ -205,11 +206,11 @@ export async function renderHomeDefault(view: MainSidebarView) {
 		};
 		const qCard = miniCard(t("题目"), String(stats.questionCount), stats.questionCount > 0 ? "var(--interactive-accent)" : undefined);
 		qCard.addEventListener("click", () => { view.activeSection = "questions"; void view.render(); });
-		const nCard = miniCard(t("笔记"), String(stats.noteCount), stats.noteCount > 0 ? "var(--color-green)" : undefined);
+		const nCard = miniCard(t("笔记"), String(stats.noteCount), stats.noteCount > 0 ? "var(--qg-success)" : undefined);
 		nCard.addEventListener("click", () => { view.activeSection = "notes"; void view.render(); });
-		const dueCard = miniCard(t("待复习"), String(stats.dueCount), stats.dueCount > 0 ? "var(--color-orange)" : undefined);
+		const dueCard = miniCard(t("待复习"), String(stats.dueCount), stats.dueCount > 0 ? "var(--qg-warn)" : undefined);
 		dueCard.addEventListener("click", () => { view.activeSection = "review"; void view.render(); });
-		const wCard = miniCard(t("错题"), String(stats.totalWrong), stats.totalWrong > 0 ? "var(--color-red)" : undefined);
+		const wCard = miniCard(t("错题"), String(stats.totalWrong), stats.totalWrong > 0 ? "var(--qg-danger)" : undefined);
 		wCard.addEventListener("click", () => { view.activeSection = "wrong"; view.wrongView = "list"; void view.render(); });
 
 		const heatmapSection = el.createDiv({ cls: "qg-section-card qg-clip", attr: { style: "margin-bottom:16px;padding:14px;border-radius:16px;overflow:hidden;" } });

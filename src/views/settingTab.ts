@@ -1,159 +1,248 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, type SettingDefinitionItem, type SettingGroupItem } from "obsidian";
 
 import type QuestionGeneratorPlugin from "../main";
-import { INTERVAL_PRESETS } from "../constants";
+import { EASE_PRESETS } from "../constants";
 import { t, setLanguage } from "../i18n/index";
+import { SETTING_SECTIONS, itemsFor, parseSettingValue, asStr, clampSettingValue, type SettingItem } from "./settingsSchema";
+
+/** 文本类输入合并写入的防抖窗口（ms）。 */
+const SAVE_DEBOUNCE_MS = 400;
+/** 区块说明文案样式（与命令式渲染保持一致）。 */
+const SECTION_NOTE_STYLE = "color:var(--text-muted);font-size:14px;margin-bottom:8px;";
+const SECTION_FOOTER_STYLE = "color:var(--text-muted);font-size:14px;line-height:1.6;margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);white-space:pre-wrap;";
+
+type SettingsRecord = Record<string, unknown>;
 
 export class QuestionGeneratorSettingTab extends PluginSettingTab {
 	plugin: QuestionGeneratorPlugin;
+	/** 待落盘的防抖定时器；null 表示没有待写入的改动。 */
+	private saveTimer: number | null = null;
 
 	constructor(app: App, plugin: QuestionGeneratorPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
 
+	// ===================== 读写与落盘 =====================
+
+	private get record(): SettingsRecord {
+		return this.plugin.settings as unknown as SettingsRecord;
+	}
+
+	private setValue(key: string, value: unknown): void {
+		this.record[key] = value;
+	}
+
+	/** 连续输入时合并写入，避免每敲一个字符就写一次 data.json。 */
+	private scheduleSave(): void {
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => {
+			this.saveTimer = null;
+			void this.plugin.saveSettings();
+		}, SAVE_DEBOUNCE_MS);
+	}
+
+	/** 立即落盘（开关 / 下拉 / 预设按钮等离散操作）。 */
+	private flushSave(): void {
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		void this.plugin.saveSettings();
+	}
+
+	/** 关闭设置页时把尚未落盘的改动写回，避免防抖窗口内切页导致丢改动。 */
+	hide(): void {
+		this.flushSave();
+		super.hide();
+	}
+
+	/**
+	 * 1.13+ 用声明式刷新；1.12 运行时没有 `update()`，回退到命令式重绘。
+	 * 不做这个判断会在旧版 Obsidian 上抛 "update is not a function"。
+	 */
+	private refreshSettingsUi(): void {
+		const tab = this as unknown as { update?: () => void };
+		if (typeof tab.update === "function") {
+			tab.update();
+			return;
+		}
+		this.renderImperative();
+	}
+
+	private findItem(key: string): SettingItem | undefined {
+		for (const section of SETTING_SECTIONS) {
+			for (const item of section.items) if (item.key === key) return item;
+		}
+		return undefined;
+	}
+
+	/** 写入一个设置项：夹紧范围 + 选择落盘时机 + 处理语言切换的副作用。 */
+	private applyValue(item: SettingItem, raw: unknown): void {
+		const coerced = typeof raw === "string" ? parseSettingValue(item, raw) : raw;
+		this.setValue(item.key, clampSettingValue(item, coerced));
+		if (item.key === "language") {
+			setLanguage(this.plugin.settings.language);
+			this.flushSave();
+			this.plugin.refreshSidebarChrome();
+			this.refreshSettingsUi();
+			return;
+		}
+		if (item.type === "text" || item.type === "number") this.scheduleSave();
+		else this.flushSave();
+	}
+
+	// ===================== 声明式定义（Obsidian 1.13+） =====================
+
+	getControlValue(key: string): unknown {
+		return this.record[key];
+	}
+
+	/**
+	 * 必须覆写：基类默认实现直接写 `plugin.settings` 再落盘，
+	 * 而本插件的 `saveSettings()` 需要额外带上 `history`，否则历史记录会被覆盖掉。
+	 */
+	setControlValue(key: string, value: unknown): void {
+		const item = this.findItem(key);
+		if (item) this.applyValue(item, value);
+	}
+
+	/**
+	 * 声明式设置定义。与 `display()` 共用 SETTING_SECTIONS 这一份单一事实来源，
+	 * 因此两个渲染路径不会分叉。
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const out: SettingDefinitionItem[] = [];
+		for (const section of SETTING_SECTIONS) {
+			const items = itemsFor(section, "native");
+			if (items.length === 0) continue;
+			const groupItems: SettingGroupItem[] = [];
+			if (section.note) groupItems.push(this.noteDefinition(section.note, SECTION_NOTE_STYLE));
+			for (const item of items) groupItems.push(this.definitionFor(item));
+			if (section.footerNote) groupItems.push(this.noteDefinition(section.footerNote, SECTION_FOOTER_STYLE));
+			out.push({ type: "group", heading: t(section.title), items: groupItems });
+		}
+		return out;
+	}
+
+	/** 纯说明文案行（区块的 note / footerNote），不绑定任何值。 */
+	private noteDefinition(text: string, style: string): SettingGroupItem {
+		return {
+			name: t(text),
+			render: (setting: Setting) => {
+				setting.settingEl.empty();
+				setting.settingEl.createDiv({ text: t(text), attr: { style } });
+			},
+		};
+	}
+
+	private definitionFor(item: SettingItem): SettingGroupItem {
+		const base = { name: t(item.label), desc: item.desc ? t(item.desc) : undefined };
+
+		if (item.type === "toggle") {
+			return { ...base, control: { type: "toggle", key: item.key } };
+		}
+		if (item.type === "select") {
+			const options: Record<string, string> = {};
+			for (const o of item.options || []) options[o.value] = t(o.label);
+			return { ...base, control: { type: "dropdown", key: item.key, options } };
+		}
+		if (item.type === "number") {
+			return {
+				...base,
+				control: {
+					type: "number",
+					key: item.key,
+					placeholder: item.placeholder ? t(item.placeholder) : undefined,
+					min: item.min !== undefined ? Number(item.min) : undefined,
+					max: item.max !== undefined ? Number(item.max) : undefined,
+					step: item.step !== undefined ? Number(item.step) : 1,
+				},
+			};
+		}
+		// easePreset 需要三个一键填入按钮，声明式控件表达不了，用 render 保持原交互。
+		if (item.type === "easePreset") {
+			return { ...base, render: (setting: Setting) => this.renderEasePreset(setting, item) };
+		}
+		return { ...base, control: { type: "text", key: item.key, placeholder: item.placeholder ? t(item.placeholder) : undefined } };
+	}
+
+	// ===================== 命令式渲染（Obsidian < 1.13 回退） =====================
+
+	/**
+	 * Obsidian < 1.13 的渲染路径。
+	 * 1.13+ 会优先采用 `getSettingDefinitions()`，官方文档明确要求保留此方法作为旧版回退。
+	 */
 	display(): void {
+		this.renderImperative();
+	}
+
+	private renderImperative(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		const s = this.plugin.settings;
-
-		// --- 界面语言 ---
-		new Setting(containerEl)
-			.setName(t("界面语言"))
-			.setDesc(t("切换后界面文案即时生效；命令面板中的命令名需重启插件后更新"))
-			.addDropdown(cb => {
-				cb.addOption("zh", "中文").addOption("en", "English")
-					.setValue(s.language)
-					.onChange(async v => {
-						const lang = v as "zh" | "en";
-						s.language = lang;
-						setLanguage(lang);
-						await this.plugin.saveSettings();
-						this.display();
-					});
-			});
-
-		new Setting(containerEl).setName(t("智学助手设置")).setHeading();
-
-		// --- 文件夹 ---
-		new Setting(containerEl).setName(t("文件夹")).setHeading();
-		containerEl.createDiv({ text: t("根文件夹下包含所有模块子文件夹，修改后需重启插件生效"), attr: { style: "color:var(--text-muted);font-size:14px;margin-bottom:8px;" } });
-
-		new Setting(containerEl)
-			.setName(t("根文件夹"))
-			.setDesc(t("所有模块子文件夹的父目录"))
-			.addText(cb => cb.setPlaceholder("智学助手").setValue(s.rootFolder).onChange(v => { s.rootFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("题目文件夹"))
-			.addText(cb => cb.setValue(s.questionFolder).onChange(v => { s.questionFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("错题文件夹"))
-			.addText(cb => cb.setValue(s.wrongBookFolder).onChange(v => { s.wrongBookFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("笔记文件夹"))
-			.addText(cb => cb.setPlaceholder("笔记").setValue(s.noteViewFolder).onChange(v => { s.noteViewFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("知识点文件夹"))
-			.setDesc(t("统一的知识点索引目录（与题目/笔记/错题同层），索引文件内含「相关题目/相关笔记/相关错题」三段"))
-			.addText(cb => cb.setPlaceholder("知识点").setValue(s.knowledgeFolder).onChange(v => { s.knowledgeFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("转换md文件夹"))
-			.setDesc(t("对非md文件（txt/rtf/docx/PDF/图片）生成题目或识别试卷时，把转换后的文本保存为md文件到这里，留空则关闭"))
-			.addText(cb => cb.setValue(s.convertedMdFolder).onChange(v => { s.convertedMdFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("AI识别文件夹"))
-			.addText(cb => cb.setPlaceholder("题目/识别试卷").setValue(s.extractedExamFolder).onChange(v => { s.extractedExamFolder = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("排除文件夹"))
-			.setDesc(t("逗号分隔的文件夹名，扫描时跳过"))
-			.addText(cb => cb.setValue(s.excludeFolders).onChange(v => { s.excludeFolders = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("生成后自动保存到题库"))
-			.addToggle(cb => cb.setValue(s.autoSave).onChange(v => { s.autoSave = v; void this.plugin.saveSettings(); }));
-		containerEl.createDiv({ text: t("预期目录结构：\n根文件夹/\n├─ 题目/（含 识别试卷/）\n├─ 错题/\n├─ 笔记/\n├─ 知识点/（统一索引，含相关题目/相关笔记/相关错题三段）\n└─ md文件/"), attr: { style: "color:var(--text-muted);font-size:14px;line-height:1.6;margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);white-space:pre-wrap;" } });
-
-		// --- 默认题目数量 ---
-		new Setting(containerEl).setName(t("默认题目数量")).setHeading();
-		const counts: { label: string; key: "countSingle" | "countMulti" | "countJudge" | "countBlank" | "countEssay" }[] = [
-			{ label: t("单选题"), key: "countSingle" },
-			{ label: t("多选题"), key: "countMulti" },
-			{ label: t("判断题"), key: "countJudge" },
-			{ label: t("填空题"), key: "countBlank" },
-			{ label: t("简答题"), key: "countEssay" },
-		];
-		for (const c of counts) {
-			new Setting(containerEl)
-				.setName(c.label)
-				.addText(cb => cb.setValue(String(s[c.key])).onChange(v => { s[c.key] = parseInt(v) || 0; void this.plugin.saveSettings(); }));
+		for (const section of SETTING_SECTIONS) {
+			const items = itemsFor(section, "native");
+			if (items.length === 0) continue;
+			new Setting(containerEl).setName(t(section.title)).setHeading();
+			if (section.note) containerEl.createDiv({ text: t(section.note), attr: { style: SECTION_NOTE_STYLE } });
+			for (const item of items) this.renderItem(containerEl, item);
+			if (section.footerNote) containerEl.createDiv({ text: t(section.footerNote), attr: { style: SECTION_FOOTER_STYLE } });
 		}
+	}
 
-		// --- API 配置 ---
-		new Setting(containerEl).setName(t("API 配置")).setHeading();
-		new Setting(containerEl)
-			.setName(t("接口类型"))
-			.addDropdown(cb => { cb.addOption("ollama", "Ollama").addOption("openai", t("OpenAI兼容")).setValue(s.apiType).onChange(v => { s.apiType = v as "ollama" | "openai"; void this.plugin.saveSettings(); }); });
-		new Setting(containerEl)
-			.setName(t("接口地址"))
-			.addText(cb => cb.setValue(s.baseUrl).onChange(v => { s.baseUrl = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("模型名称"))
-			.addText(cb => cb.setValue(s.modelName).onChange(v => { s.modelName = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("API key"))
-			.addText(cb => cb.setValue(s.apiKey || "").onChange(v => { s.apiKey = v; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("Temperature"))
-			.setDesc(t("控制输出随机性，0-2，越低越确定"))
-			.addText(cb => cb.setValue(String(s.temperature)).onChange(v => { s.temperature = parseFloat(v) || 0.1; void this.plugin.saveSettings(); }));
+	private renderItem(containerEl: HTMLElement, item: SettingItem): void {
+		const setting = new Setting(containerEl).setName(t(item.label));
+		if (item.desc) setting.setDesc(t(item.desc));
 
-		// --- 复习间隔设置 ---
-		new Setting(containerEl).setName(t("复习间隔设置")).setHeading();
-		containerEl.createDiv({ text: t("参数越大复习间隔越长，记忆越牢固但可能遗忘；参数越小复习越频繁，短期效果好但耗时多。推荐使用默认值。"), attr: { style: "color:var(--text-muted);font-size:14px;margin-bottom:10px;line-height:1.5;padding:8px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);" } });
-
-		const intervalConfigs: { label: string; key: "wrongReviewIntervals" | "questionReviewIntervals" | "noteReviewIntervals"; presetKey: string }[] = [
-			{ label: t("错题复习间隔（天）"), key: "wrongReviewIntervals", presetKey: "wrong" },
-			{ label: t("题目复习间隔（天）"), key: "questionReviewIntervals", presetKey: "question" },
-			{ label: t("笔记复习间隔（天）"), key: "noteReviewIntervals", presetKey: "note" },
-		];
-		for (const cfg of intervalConfigs) {
-			const presets = INTERVAL_PRESETS[cfg.presetKey]!;
-			const currentVal = s[cfg.key];
-			const currentPreset = presets.find(p => p.values === currentVal);
-			const activePreset = currentPreset || presets[1]!;
-			const setting = new Setting(containerEl)
-				.setName(cfg.label)
-				.setDesc(t(activePreset.hint))
-				.addText(cb => cb.setValue(currentVal).setPlaceholder("1,2,4,7,15,30").onChange(v => { s[cfg.key] = v; void this.plugin.saveSettings(); }));
-			const btnDiv = setting.settingEl.createDiv({ attr: { style: "display:flex;gap:4px;margin-top:6px;" } });
-			for (const p of presets) {
-				const isActive = p.values === currentVal;
-				const btn = btnDiv.createEl("button", { text: t(p.label), cls: isActive ? "qg-interval-active" : undefined, attr: { style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:13px;border:1px solid var(--background-modifier-border);" + (isActive ? "" : "background:var(--background-primary);color:var(--text-muted);") } });
-				btn.addEventListener("click", () => { s[cfg.key] = p.values; void this.plugin.saveSettings(); this.display(); });
-			}
+		if (item.type === "toggle") {
+			setting.addToggle(cb => cb.setValue(Boolean(this.record[item.key])).onChange(v => this.applyValue(item, v)));
+			return;
 		}
-		// --- 学习设置 ---
-		new Setting(containerEl).setName(t("学习设置")).setHeading();
-		new Setting(containerEl)
-			.setName(t("薄弱点阈值"))
-			.setDesc(t("次以上错题标记为薄弱"))
-			.addText(cb => cb.setValue(String(s.weakPointThreshold)).onChange(v => { s.weakPointThreshold = parseInt(v) || 2; void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("启动时提醒复习"))
-			.addToggle(cb => cb.setValue(s.autoReviewReminder).onChange(v => { s.autoReviewReminder = v; void this.plugin.saveSettings(); }));
-
-		// --- AI 助手 ---
-		new Setting(containerEl).setName(t("AI 助手")).setHeading();
-		new Setting(containerEl)
-			.setName(t("引用总预算(字)"))
-			.setDesc(t("单次提问最多带入的引用文本总量，超出按引用顺序截断；本地小模型建议调小"))
-			.addText(cb => cb.setValue(String(s.chatRefBudget)).onChange(v => { s.chatRefBudget = Math.max(0, parseInt(v) || 0); void this.plugin.saveSettings(); }));
-		new Setting(containerEl)
-			.setName(t("聊天检索范围"))
-			.setDesc(t("「整个 vault」会把任意文件夹中命中的笔记内容发送给已配置的 AI 接口，请注意隐私"))
-			.addDropdown(cb => {
-				cb.addOption("plugin", t("仅插件知识库")).addOption("vault", t("整个 vault"))
-					.setValue(s.chatSearchScope)
-					.onChange(v => { s.chatSearchScope = v === "vault" ? "vault" : "plugin"; void this.plugin.saveSettings(); });
+		if (item.type === "select") {
+			setting.addDropdown(cb => {
+				for (const o of item.options || []) cb.addOption(o.value, t(o.label));
+				cb.setValue(asStr(this.record[item.key])).onChange(v => this.applyValue(item, v));
 			});
+			return;
+		}
+		if (item.type === "number") {
+			setting.addText(cb => {
+				cb.setValue(asStr(this.record[item.key])).onChange(v => this.applyValue(item, v));
+				// 输入过程中不打断用户，失焦时再把夹紧后的真实值回填到输入框。
+				cb.inputEl.addEventListener("blur", () => { cb.setValue(asStr(this.record[item.key])); });
+			});
+			return;
+		}
+		if (item.type === "easePreset") {
+			setting.addText(cb => {
+				cb.setValue(asStr(this.record[item.key])).onChange(v => this.applyValue(item, v));
+				cb.inputEl.addEventListener("blur", () => { cb.setValue(asStr(this.record[item.key])); });
+			});
+			this.renderEasePreset(setting, item);
+			return;
+		}
+		setting.addText(cb => cb.setValue(asStr(this.record[item.key])).setPlaceholder(item.placeholder ? t(item.placeholder) : "").onChange(v => this.applyValue(item, v)));
+	}
+
+	/** 三个难度因子一键填入按钮（命令式与声明式共用）。 */
+	private renderEasePreset(setting: Setting, item: SettingItem): void {
+		const current = Number(this.record[item.key]);
+		const row = setting.settingEl.createDiv({ attr: { style: "display:flex;gap:4px;margin-top:6px;" } });
+		for (const p of EASE_PRESETS) {
+			const isActive = current === p.factor;
+			const btn = row.createEl("button", {
+				text: t(p.label),
+				cls: isActive ? "qg-interval-active" : undefined,
+				attr: {
+					title: t(p.hint),
+					style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:13px;border:1px solid var(--background-modifier-border);" + (isActive ? "" : "background:var(--background-primary);color:var(--text-muted);"),
+				},
+			});
+			btn.addEventListener("click", () => {
+				this.setValue(item.key, p.factor);
+				this.flushSave();
+				this.refreshSettingsUi();
+			});
+		}
 	}
 }

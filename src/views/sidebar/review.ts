@@ -5,6 +5,9 @@ import type { WrongAnswerNote } from "../../types";
 import { isDueForReview } from "../../utils/review";
 import { daysUntil } from "../../utils/fs-utils";
 import { knowledgeTags } from "../../utils/frontmatter";
+import { groupBySource, groupByTag } from "../../utils/listView";
+import { QUALITY } from "../../utils/sm2";
+import { segBar, emptyState, collapseGroup } from "./shared/ui";
 import { t, tf } from "../../i18n/index";
 
 export async function renderReviewTab(view: MainSidebarView) {
@@ -22,42 +25,39 @@ export async function renderReviewTab(view: MainSidebarView) {
 		...questionFiles.map(n => ({ note: n, source: "question" as const })),
 		...vaultNotes.map(n => ({ note: n, source: "note" as const })),
 	];
+	const dueItems = allItems.filter(i => isDueForReview(i.note));
 
-	const filterBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 	const filterOpts: { key: "all" | "wrong" | "question" | "note"; label: string }[] = [
 		{ key: "all", label: t("全部") },
 		{ key: "wrong", label: t("错题") },
 		{ key: "question", label: t("题目") },
 		{ key: "note", label: t("笔记") },
 	];
-	const dueItems = allItems.filter(i => isDueForReview(i.note));
-	for (const opt of filterOpts) {
-		const count = opt.key === "all" ? dueItems.length : dueItems.filter(i => i.source === opt.key).length;
-		const btn = filterBar.createEl("button", { text: opt.label + " (" + count + ")", attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (view.reviewFilterType === opt.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-		btn.addEventListener("click", () => { view.reviewFilterType = opt.key; void view.renderReviewTab(); });
-	}
+	segBar(el, filterOpts.map(opt => ({ key: opt.key, label: opt.label + " (" + (opt.key === "all" ? dueItems.length : dueItems.filter(i => i.source === opt.key).length) + ")" })), key => view.reviewFilterType === key, key => {
+		view.reviewFilterType = key as "all" | "wrong" | "question" | "note";
+		void view.renderReviewTab();
+	});
 
-	const sortBar = el.createDiv({ cls: "qg-seg-bar", attr: { style: "display:flex;gap:2px;margin-bottom:10px;" } });
 	const sortOpts: { key: "default" | "source" | "tag" | "time"; label: string }[] = [
 		{ key: "default", label: t("默认") },
 		{ key: "source", label: t("按源文件") },
 		{ key: "tag", label: t("按知识点") },
 		{ key: "time", label: t("按时间") },
 	];
-	for (const opt of sortOpts) {
-		const btn = sortBar.createEl("button", { text: opt.label, attr: { style: "padding:3px 8px;border-radius:3px;cursor:pointer;font-size:17px;border:1px solid var(--background-modifier-border);background:" + (view.reviewSortBy === opt.key ? "var(--interactive-accent);color:var(--text-on-accent);" : "var(--background-secondary);color:var(--text-muted);") } });
-		btn.addEventListener("click", () => { view.reviewSortBy = opt.key; void view.renderReviewTab(); });
-	}
+	segBar(el, sortOpts, key => view.reviewSortBy === key, key => {
+		view.reviewSortBy = key as "default" | "source" | "tag" | "time";
+		void view.renderReviewTab();
+	});
 
 	if (dueItems.length === 0) {
-		el.createDiv({ text: t("今日暂无待复习内容，继续学习积累吧！"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:20px;" } });
+		emptyState(el, t("今日暂无待复习内容，继续学习积累吧！"));
 		return;
 	}
 
 	const filteredDue = view.reviewFilterType === "all" ? dueItems : dueItems.filter(i => i.source === view.reviewFilterType);
 
 	const sourceLabel: Record<string, string> = { wrong: t("错题"), question: t("题目"), note: t("笔记") };
-	const sourceColor: Record<string, string> = { wrong: "var(--color-red)", question: "var(--interactive-accent)", note: "var(--color-green)" };
+	const sourceColor: Record<string, string> = { wrong: "var(--qg-danger)", question: "var(--interactive-accent)", note: "var(--qg-success)" };
 
 	const banner = el.createDiv({ attr: { style: "padding:14px 16px;margin-bottom:14px;border-radius:8px;border:2px solid var(--interactive-accent);background:color-mix(in srgb, var(--interactive-accent) 8%, transparent);" } });
 	const bTop = banner.createDiv({ attr: { style: "display:flex;align-items:center;justify-content:space-between;" } });
@@ -84,59 +84,56 @@ export async function renderReviewTab(view: MainSidebarView) {
 		sortedDue.sort((a, b) => priority[a.source]! - priority[b.source]!);
 	}
 
-	let lastGroup = "";
-	for (const item of sortedDue) {
-		const groupKey = view.reviewSortBy === "source" ? (item.note.sourceFile || item.note.baseName) : view.reviewSortBy === "tag" ? (knowledgeTags(item.note.tags)[0] || t("无标签")) : "";
-		if (view.reviewSortBy !== "default" && groupKey && groupKey !== lastGroup) {
-			if (lastGroup !== "") el.createDiv({ attr: { style: "height:6px;" } });
-			el.createDiv({ text: groupKey, attr: { style: "font-size:16px;font-weight:500;color:var(--text-faint);margin-bottom:4px;padding-left:4px;" } });
-			lastGroup = groupKey;
-		}
-		renderReviewRow(view, el, item, sourceLabel, sourceColor);
+	const renderItems = (list: ReviewItem[], body: HTMLElement) => {
+		for (const item of list) renderReviewRow(view, body, item, sourceLabel, sourceColor);
+	};
+
+	if (view.reviewSortBy === "source") {
+		const { groups } = groupBySource(sortedDue, i => i.note.sourceFile || i.note.baseName);
+for (const g of groups) collapseGroup(el, { title: g.key, countText: tf("{n}项", { n: g.items.length }) }, body => renderItems(g.items, body));
+		} else if (view.reviewSortBy === "tag") {
+			const { groups, untagged } = groupByTag(sortedDue, i => knowledgeTags(i.note.tags));
+			for (const g of groups) collapseGroup(el, { title: g.key, countText: tf("{n}项", { n: g.items.length }) }, body => renderItems(g.items, body));
+		if (untagged.length > 0) collapseGroup(el, { title: t("无标签"), countText: tf("{n}项", { n: untagged.length }) }, body => renderItems(untagged, body));
+	} else {
+		renderItems(sortedDue, el);
 	}
 }
 
 function renderReviewRow(view: MainSidebarView, container: HTMLElement, item: { note: WrongAnswerNote; source: string }, sourceLabel: Record<string, string>, sourceColor: Record<string, string>) {
-	const row = container.createDiv({ cls: "qg-list-card", attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;transition:background 0.15s;" } });
+	const row = container.createDiv({ cls: "qg-list-item", attr: { style: "display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:4px;border-radius:4px;border:1px solid var(--background-modifier-border);font-size:18px;transition:background 0.15s;" } });
 	row.classList.add("qg-hover-bg");
 	row.createSpan({ text: sourceLabel[item.source] || item.source, attr: { style: "min-width:32px;font-size:13px;padding:1px 5px;border-radius:3px;background:" + (sourceColor[item.source] || "var(--text-muted)") + ";color:var(--qg-on-chip, var(--text-on-accent));" } });
 	const nameText = (item.note.sourceFile || item.note.baseName).replace(/\[\[|\]\]/g, "");
 	row.createSpan({ text: nameText, attr: { style: "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--interactive-accent);" } });
 	const kp = knowledgeTags(item.note.tags);
 	view.renderKnowledgeTags(row, kp);
-	if (item.source === "wrong" && (item.note.wrongCount || 0) > 0) row.createSpan({ text: tf("错{n}次", { n: item.note.wrongCount }), attr: { style: "font-size:15px;color:var(--color-red);min-width:36px;text-align:right;flex-shrink:0;" } });
-	if (item.note.nextReview) {
-		const isOverdue = isDueForReview(item.note);
-		if (isOverdue) {
-			row.createSpan({ text: t("已到期"), attr: { style: "font-size:15px;color:var(--interactive-accent);font-weight:600;min-width:44px;text-align:right;" } });
-		} else {
-			row.createSpan({ text: tf("{d}天后", { d: daysUntil(item.note.nextReview) }), attr: { style: "font-size:15px;color:var(--text-faint);min-width:44px;text-align:right;" } });
-		}
+	if (item.source === "wrong" && (item.note.wrongCount || 0) > 0) row.createSpan({ text: tf("错{n}次", { n: item.note.wrongCount }), attr: { style: "font-size:15px;color:var(--qg-danger);min-width:36px;text-align:right;flex-shrink:0;" } });
+	// 到期（含尚未排期的「新条目」）显示「已到期」；只有排在未来才显示剩余天数。
+	if (isDueForReview(item.note)) {
+		row.createSpan({ text: t("已到期"), attr: { style: "font-size:15px;color:var(--interactive-accent);font-weight:600;min-width:44px;text-align:right;" } });
+	} else if (item.note.nextReview) {
+		row.createSpan({ text: tf("{d}天后", { d: daysUntil(item.note.nextReview) }), attr: { style: "font-size:15px;color:var(--text-faint);min-width:44px;text-align:right;" } });
 	}
-	const doneBtn = row.createEl("button", { text: t("✓ 完成"), attr: { style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:15px;border:1px solid var(--color-green);background:transparent;color:var(--color-green);white-space:nowrap;" } });
-	doneBtn.addEventListener("click", (e) => { e.stopPropagation(); void markReviewDone(view, item.note, item.source as "wrong" | "question" | "note"); });
-	const failBtn = row.createEl("button", { text: t("✗ 仍错"), attr: { style: "padding:2px 8px;border-radius:3px;cursor:pointer;font-size:15px;border:1px solid var(--color-red);background:transparent;color:var(--color-red);white-space:nowrap;" } });
-	failBtn.addEventListener("click", (e) => { e.stopPropagation(); void markReviewStillWrong(view, item.note, item.source as "wrong" | "question" | "note"); });
+	const qualityBtn = (label: string, q: number, color: string) => {
+		const b = row.createEl("button", { text: label, attr: { style: "padding:2px 7px;border-radius:3px;cursor:pointer;font-size:15px;border:1px solid " + color + ";background:transparent;color:" + color + ";white-space:nowrap;flex-shrink:0;" } });
+		b.addEventListener("click", (e) => { e.stopPropagation(); void markReviewQuality(view, item.note, item.source as "wrong" | "question" | "note", q); });
+	};
+	qualityBtn(t("忘记"), QUALITY.forgot, "var(--qg-danger)");
+	qualityBtn(t("困难"), QUALITY.hard, "var(--qg-warn)");
+	qualityBtn(t("一般"), QUALITY.good, "var(--qg-success)");
+	qualityBtn(t("简单"), QUALITY.easy, "var(--qg-info)");
 	row.addEventListener("click", () => {
 		if (item.source === "wrong") { view.wrongView = "detail"; view.wrongCurrentNote = item.note; view.activeSection = "wrong"; void view.render(); }
 		else { void view.app.workspace.openLinkText(item.note.baseName, "", false); }
 	});
 }
 
-async function markReviewDone(view: MainSidebarView, note: WrongAnswerNote, source: "wrong" | "question" | "note") {
+async function markReviewQuality(view: MainSidebarView, note: WrongAnswerNote, source: "wrong" | "question" | "note", quality: number) {
 	try {
-		const result = await view.updateReviewSchedule(note, source, true);
-		new Notice(tf("已标记完成！下次复习 {d}（间隔{i}天）", { d: result.nextReview, i: result.interval }));
-		void view.renderReviewTab();
-	} catch (err) {
-		new Notice(tf("更新复习计划失败：{msg}", { msg: (err as Error).message }));
-	}
-}
-
-async function markReviewStillWrong(view: MainSidebarView, note: WrongAnswerNote, source: "wrong" | "question" | "note") {
-	try {
-		await view.updateReviewSchedule(note, source, false);
-		new Notice(t("已记录错误，明天复习"));
+		const result = await view.updateReviewSchedule(note, source, quality);
+		if (quality >= 3) new Notice(tf("已记录！下次复习 {d}（间隔{i}天）", { d: result.nextReview, i: result.interval }));
+		else new Notice(t("已记录错误，明天复习"));
 		void view.renderReviewTab();
 	} catch (err) {
 		new Notice(tf("更新复习计划失败：{msg}", { msg: (err as Error).message }));

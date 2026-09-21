@@ -1,5 +1,30 @@
 import { vi } from "vitest";
 
+/**
+ * 极简 DOM 元素替身：Obsidian 会给 HTMLElement 注入 empty/createEl/createDiv 等扩展方法，
+ * 测试环境没有这些扩展，这里补齐弹窗渲染真正用到的那几个。
+ * 必须用 `mock` 前缀命名，否则 vitest 的 vi.mock 提升检查会拒绝引用。
+ */
+function mockStubEl(): any {
+	const el: any = {
+		style: {},
+		value: "",
+		checked: false,
+		textContent: "",
+		addEventListener() {},
+		removeEventListener() {},
+		setText(t: string) { el.textContent = t; },
+		focus() {},
+		select() {},
+		empty() {},
+		createEl: () => mockStubEl(),
+		createDiv: () => mockStubEl(),
+		createSpan: () => mockStubEl(),
+		appendChild() {},
+	};
+	return el;
+}
+
 vi.mock("obsidian", () => {
 	return {
 		App: class {},
@@ -31,11 +56,11 @@ vi.mock("obsidian", () => {
 			constructor(msg: string) { this.messageEl.textContent = msg; }
 		},
 		Modal: class {
-			contentEl = document.createElement("div");
+			contentEl: any = mockStubEl();
 			app: any;
 			constructor(app: any) { this.app = app; }
-			open() {}
-			close() {}
+			open() { this.onOpen(); }
+			close() { this.onClose(); }
 			onOpen() {}
 			onClose() {}
 		},
@@ -48,14 +73,20 @@ vi.mock("obsidian", () => {
 			containerEl = document.createElement("div");
 			constructor(_app: any, _plugin: any) {}
 			display() {}
+			hide() {}
+			update() {}
+			getSettingDefinitions() { return []; }
+			getControlValue(_key: string) { return undefined; }
+			setControlValue(_key: string, _value: unknown) {}
 		},
 		Setting: class {
 			settingEl = document.createElement("div");
+			inputEl = document.createElement("input");
 			constructor(_containerEl: any) {}
 			setName(_name: string) { return this; }
 			setDesc(_desc: string) { return this; }
 			setHeading() { return this; }
-			addText(cb: any) { cb({ setValue: () => ({ setPlaceholder: () => ({ onChange: () => {} }) }), setPlaceholder: () => ({ onChange: () => {} }), onChange: () => {} }); return this; }
+			addText(cb: any) { cb({ inputEl: this.inputEl, setValue: () => ({ setPlaceholder: () => ({ onChange: () => {} }) }), setPlaceholder: () => ({ onChange: () => {} }), onChange: () => {} }); return this; }
 			addToggle(cb: any) { cb({ setValue: () => ({ onChange: () => {} }), onChange: () => {} }); return this; }
 			addDropdown(cb: any) { cb({ addOption: () => ({ addOption: () => ({ setValue: () => ({ onChange: () => {} }) }) }), setValue: () => ({ onChange: () => {} }), onChange: () => {} }); return this; }
 			addButton(cb: any) { cb({ setButtonText: () => ({ onClick: () => {} }) }); return this; }
@@ -68,6 +99,7 @@ vi.mock("electron", () => {
 	class MockBrowserWindow {
 		constructor(_opts: any) {}
 		loadURL(_url: string) { return Promise.resolve(); }
+		loadFile(_filePath: string) { return Promise.resolve(); }
 		webContents = {
 			printToPDF: vi.fn().mockResolvedValue(Buffer.from("")),
 		};
@@ -80,6 +112,9 @@ vi.mock("electron", () => {
 				showSaveDialog: vi.fn(),
 			},
 		},
+		// 故意不提供可用的 shell.trashItem：这样 trashFileAbs 会走本地 .qg-trash 兜底路径，
+		// 便于测试「删除必须可恢复」这条保证。
+		shell: undefined,
 	};
 });
 

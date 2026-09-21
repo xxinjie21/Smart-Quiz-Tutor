@@ -6,8 +6,9 @@ import type { MainSidebarView } from "../sidebarView";
 import type { PluginSettings, HistoryEntry } from "../../types";
 import { SEARCH_DEBOUNCE_MS, TOKEN_WARN_THRESHOLD, MAX_HISTORY_SNIPPET } from "../../constants";
 import { EXAM_SOURCE_EXTS, isAbs, joinPath, writeFileStr, readFileStr, ensureFolder } from "../../utils/fs-utils";
-import { safeName, cleanSourceText, estimateTokens, stripAnswersForExport } from "../../utils/text";
-import { DEFAULT_QUESTION_INTERVALS, parseReviewIntervals } from "../../utils/review";
+import { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, extractAnswersForExport } from "../../utils/text";
+import { localDateStr, addDaysStr } from "../../utils/date";
+import { clampEase } from "../../utils/sm2";
 import { parseQuestions } from "../../utils/parse";
 import { debounce } from "../../utils/debounce";
 import { stripAnswerSummarySection, normalizeExamContent, fixSequentialNumbers } from "../../utils/layout";
@@ -16,14 +17,14 @@ import { getElectronRemote } from "../../utils/electron";
 import { buildGeneratePrompt, parseAITagsFromResult, validateGenerated } from "../../services/questionService";
 import { buildFM, knowledgeTags } from "../../utils/frontmatter";
 import { t, tf, getLanguage } from "../../i18n/index";
+import { backButton, emptyState } from "./shared/ui";
 
 export function renderFilePicker(view: MainSidebarView) {
 		if (!view.innerContentEl) return;
 		const el = view.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { view.fpSelected.clear(); view.homeView = "default"; void view.renderHomeTab(); });
+		backButton(el, () => { view.fpSelected.clear(); view.homeView = "default"; void view.renderHomeTab(); }, t("← 返回"));
 
 		el.createDiv({ text: t("生成题目"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
 		el.createDiv({ text: t("选择vault中的文档，AI根据内容生成各类题目，生成后保存到题库"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
@@ -42,7 +43,7 @@ export function renderFilePicker(view: MainSidebarView) {
 			const activeFile = view.app.workspace.getActiveFile();
 			const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 			if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-				el.createDiv({ text: t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+				emptyState(el, t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"));
 			} else {
 				const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
 				info.createSpan({ text: t("当前文件：") });
@@ -134,8 +135,7 @@ export function renderGenerateView(view: MainSidebarView) {
 		const el = view.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { view.cancelAI(); view.genIsGenerating = false; view.homeView = "default"; void view.renderHomeTab(); });
+		backButton(el, () => { view.cancelAI(); view.genIsGenerating = false; view.homeView = "default"; void view.renderHomeTab(); }, t("← 返回"));
 
 		if (view.genResultText) {
 			view.genRenderResult();
@@ -151,7 +151,7 @@ export function renderGenerateView(view: MainSidebarView) {
 		const infoEl = el.createDiv({ attr: { style: "padding:10px 14px;margin-bottom:14px;border-radius:8px;background:var(--background-secondary);font-size:18px;line-height:1.8;" } });
 		infoEl.createDiv({ text: tf("当前文档：{name}", { name: view.genFileName }), attr: { style: "font-weight:600;" } });
 		infoEl.createDiv({ text: tf("清洗后字符数：{n}", { n: charCount.toLocaleString() }) + tf("　预估Token：{t}", { t: tokenEst.toLocaleString() }), attr: { style: "color:var(--text-muted);" } });
-		if (tokenEst > TOKEN_WARN_THRESHOLD) infoEl.createDiv({ text: t("⚠️ 内容较长，建议分段生成题目"), attr: { style: "color:var(--color-orange);margin-top:4px;" } });
+		if (tokenEst > TOKEN_WARN_THRESHOLD) infoEl.createDiv({ text: t("⚠️ 内容较长，建议分段生成题目"), attr: { style: "color:var(--qg-warn);margin-top:4px;" } });
 
 		const cfg = view.plugin.settings;
 		const savedEnabled = cfg.lastEnabledTypes.split(",").filter(Boolean);
@@ -210,8 +210,7 @@ export function genStartGenerate(view: MainSidebarView, typeStr: string) {
 		if (!el) return;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-		backBtn.addEventListener("click", () => { view.cancelAI(); view.genIsGenerating = false; view.genResultText = ""; view.renderGenerateView(); });
+		backButton(el, () => { view.cancelAI(); view.genIsGenerating = false; view.genResultText = ""; view.renderGenerateView(); }, t("← 返回设置"));
 
 		const progressEl = el.createDiv({ attr: { style: "text-align:center;padding:14px;margin-bottom:10px;border-radius:8px;background:var(--background-secondary);" } });
 		const spinner = progressEl.createDiv({ text: t("⏳ 正在生成试题..."), attr: { style: "font-size:20px;font-weight:600;line-height:1.6;" } });
@@ -221,7 +220,7 @@ export function genStartGenerate(view: MainSidebarView, typeStr: string) {
 		const update = (txt: string) => { view.genResultText = txt; textArea.value = txt; textArea.scrollTop = textArea.scrollHeight; };
 
 		const btnRow = el.createDiv({ attr: { style: "margin-top:8px;display:flex;gap:6px;" } });
-		const cancelBtn = btnRow.createEl("button", { text: t("⏹ 中止"), attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+		const cancelBtn = btnRow.createEl("button", { text: t("⏹ 中止"), attr: { style: "padding:5px 12px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 		cancelBtn.addEventListener("click", () => { view.cancelAI(); view.genIsGenerating = false; spinner.setText(t("已中止")); subText.setText(t("已获取的内容已保留")); });
 
 		void view.genRunGenerate(update, typeStr, spinner, subText);
@@ -282,8 +281,7 @@ export function genRenderResult(view: MainSidebarView) {
 		const el = view.innerContentEl;
 		el.empty();
 
-		const backBtn = el.createEl("button", { text: t("← 返回设置"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:10px;" } });
-		backBtn.addEventListener("click", () => { view.genResultText = ""; view.renderGenerateView(); });
+		backButton(el, () => { view.genResultText = ""; view.renderGenerateView(); }, t("← 返回设置"));
 
 		el.createDiv({ text: t("生成结果"), attr: { style: "font-size:20px;font-weight:bold;margin-bottom:8px;" } });
 		const textArea = el.createEl("textarea", { attr: { style: "width:100%;height:300px;font-family:monospace;font-size:18px;line-height:1.5;" } });
@@ -299,6 +297,7 @@ export function genRenderResult(view: MainSidebarView) {
 		actBtn(t("导出Word"), () => { void view.genExportWord(); });
 		actBtn(t("导出PDF"), () => { void view.genExportPdf(); });
 		actBtn(t("无答案版"), () => { void view.genExportNoAnswer(); });
+		actBtn(t("仅答案版"), () => { void view.genExportAnswerOnly(); });
 
 		const btnRow2 = el.createDiv({ attr: { style: "margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;" } });
 		const ctaBtn = (label: string, cb: () => void) => {
@@ -314,13 +313,11 @@ export async function genSaveToVault(view: MainSidebarView) {
 		view.resetAI();
 		try {
 			await ensureFolder(view.app, view.plugin.rootPath(view.plugin.settings.questionFolder));
-			const dateStr = new Date().toISOString().slice(0, 10);
+			const dateStr = localDateStr();
 			const autoTags = await view.aiSuggestTags(view.genResultText);
 			const allTags = ["题目", ...view.genCurrentTags, ...autoTags.filter(t => !view.genCurrentTags.includes(t))];
 			const sourceLink = view.genFileName ? "[[" + view.genFileName + "]]" : "";
-			const qIvls = parseReviewIntervals(view.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS);
-			const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + qIvls[0]!);
-			const fm = buildFM({ source: sourceLink, sourcePath: view.genSourcePath, date: dateStr, tags: allTags, nextReview: nextReviewDate.toISOString().slice(0, 10), interval: qIvls[0]!, correctCount: 0, wrongCount: 0 });
+			const fm = buildFM({ source: sourceLink, sourcePath: view.genSourcePath, date: dateStr, tags: allTags, nextReview: addDaysStr(dateStr, 1), interval: 1, correctCount: 0, wrongCount: 0, easeFactor: clampEase(view.plugin.settings.questionEaseFactor), repetitions: 0, lapses: 0 });
 			const kTags = knowledgeTags(allTags);
 			const knowledgeLinks = kTags.length > 0 ? "\n\n---\n\n**知识点：** " + kTags.map(t => "[[" + t + "]]").join(" ") + "\n" : "";
 			const content = fm + normalizeExamContent(view.genResultText) + knowledgeLinks;
@@ -346,7 +343,7 @@ export async function genExportMd(view: MainSidebarView) {
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: view.genFileName + "_试题.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
 			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
+			const dateStr = localDateStr();
 			fs.writeFileSync(r.filePath, "# " + view.genFileName + t(" 配套试题") + "\n\n> 来源：" + view.genFileName + "　|　日期：" + dateStr + "\n\n" + stripAnswerSummarySection(view.genResultText), "utf-8");
 			new Notice(t("Md已保存"));
 		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
@@ -358,7 +355,7 @@ export async function genExportWord(view: MainSidebarView) {
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: view.genFileName + "_试题.docx", filters: [{ name: "Word", extensions: ["docx"] }] });
 			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
+			const dateStr = localDateStr();
 			const children = buildWordParagraphs(view.genResultText, view.genFileName + t(" 配套试题"), view.genFileName + " " + dateStr);
 			const doc = new Document({ sections: [{ properties: {}, children }] });
 			const buffer = await Packer.toBuffer(doc);
@@ -385,9 +382,23 @@ export async function genExportNoAnswer(view: MainSidebarView) {
 			
 			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: view.genFileName + "_试题_无答案.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
 			if (r.canceled || !r.filePath) return;
-			const dateStr = new Date().toISOString().slice(0, 10);
+			const dateStr = localDateStr();
 			fs.writeFileSync(r.filePath, "# " + view.genFileName + t(" 配套试题（无答案版）") + "\n\n> 来源：" + view.genFileName + "　|　日期：" + dateStr + "\n\n" + noAnswerText, "utf-8");
 			new Notice(t("无答案版已保存"));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
+}
+
+export async function genExportAnswerOnly(view: MainSidebarView) {
+		try {
+			if (!view.genResultText) { new Notice(t("还没有生成试题内容")); return; }
+			const answerText = extractAnswersForExport(view.genResultText);
+			if (!answerText) { new Notice(t("没有可提取的答案")); return; }
+			
+			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: view.genFileName + "_试题_仅答案.md", filters: [{ name: "Markdown", extensions: ["md"] }] });
+			if (r.canceled || !r.filePath) return;
+			const dateStr = localDateStr();
+			fs.writeFileSync(r.filePath, "# " + view.genFileName + t(" 配套试题（仅答案版）") + "\n\n> 来源：" + view.genFileName + "　|　日期：" + dateStr + "\n\n" + answerText, "utf-8");
+			new Notice(t("仅答案版已保存"));
 		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 }
 

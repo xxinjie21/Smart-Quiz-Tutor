@@ -1,7 +1,8 @@
 import { Plugin, TFile, TFolder, Notice, Editor, Menu, MarkdownView, MarkdownFileInfo } from "obsidian";
 
 import { DEFAULT_SETTINGS, SIDEBAR_VIEW_TYPE, NOTICE_DURATION_MS, REVIEW_REMINDER_DELAY_MS, HISTORY_LIMIT, HISTORY_RESULT_CHARS } from "./constants";
-import type { HistoryEntry, WrongAnswerNote, PluginSettings } from "./types";
+import type { HistoryEntry, WrongAnswerNote, PluginSettings, ChatMessage } from "./types";
+import { type ChatAdapter } from "./utils/chatStorage";
 import { isAbs, ensureFolder, EXAM_SOURCE_EXTS } from "./utils/fs-utils";
 import { isDueForReview } from "./utils/review";
 import { pruneHistory } from "./utils/history";
@@ -21,11 +22,15 @@ export default class QuestionGeneratorPlugin extends Plugin {
 	vaultData = new VaultDataService(this);
 
 	async loadSettings() {
-		const data = await this.loadData() as { history?: HistoryEntry[]; wrongAnswers?: { timestamp?: number; fileName?: string; note?: string; resultText?: string }[] } | null;
+		const data = await this.loadData() as { history?: HistoryEntry[]; wrongAnswers?: { timestamp?: number; fileName?: string; note?: string; resultText?: string }[]; chatHistory?: ChatMessage[] } | null;
 		const raw = data ? { ...data } as Record<string, unknown> : {};
+		delete raw.chatHistory;
 		delete raw.questionKnowledgeFolder;
 		delete raw.noteKnowledgeFolder;
 		delete raw.wrongKnowledgeFolder;
+		delete raw.wrongReviewIntervals;
+		delete raw.questionReviewIntervals;
+		delete raw.noteReviewIntervals;
 		const legacyKf = ["题目/知识点", "笔记/知识点", "错题/知识点", "错题本/知识点"];
 		if (typeof raw.knowledgeFolder === "string" && legacyKf.includes(raw.knowledgeFolder)) {
 			raw.knowledgeFolder = DEFAULT_SETTINGS.knowledgeFolder;
@@ -34,6 +39,43 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		if (data?.history) this.history = data.history;
 		this.history = pruneHistory(this.history, HISTORY_LIMIT, HISTORY_RESULT_CHARS);
 		setLanguage(this.settings.language || "zh");
+	}
+
+	/** 聊天文件系统的 adapter（路径相对 vault 根）。 */
+	chatAdapter(): ChatAdapter {
+		const a = this.app.vault.adapter;
+		const base = this.app.vault.configDir + "/plugins/" + (this.manifest?.id || "smart-quiz-tutor");
+		const join = (p: string) => base + "/" + p;
+		return {
+			read: (p) => a.read(join(p)),
+			write: (p, d) => a.write(join(p), d),
+			exists: (p) => a.exists(join(p)),
+			mkdir: (p) => a.mkdir(join(p)),
+			list: (p) => a.list(join(p)),
+			remove: (p) => a.remove(join(p)),
+			rmdir: (p) => a.rmdir(join(p), false),
+		};
+	}
+
+	/** 清理旧版「工作区」目录布局（只保留 sessions/ 与 meta.json）。 */
+	async cleanupLegacyChatWorkspaces(): Promise<void> {
+		try {
+			const adapter = this.chatAdapter();
+			let folders: string[] = [];
+			try { folders = (await adapter.list("chat-data")).folders.map(f => f.split("/").pop() || f); } catch { return; }
+			for (const f of folders) {
+				if (f === "sessions") continue;
+				const dir = "chat-data/" + f;
+				try {
+					const listing = await adapter.list(dir);
+					for (const file of listing.files) await adapter.remove(dir + "/" + file);
+					for (const sub of listing.folders) await adapter.rmdir(dir + "/" + sub);
+					await adapter.rmdir(dir);
+				} catch { /* ignore */ }
+			}
+		} catch (e) {
+			logError("chat cleanup", e);
+		}
 	}
 	rootPath(subFolder: string): string {
 		const root = this.settings.rootFolder;
@@ -80,8 +122,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		return this.vaultData.migrateOldWrongAnswers();
 	}
 
-	async deleteWrongNote(filePath: string): Promise<void> {
-		return this.vaultData.deleteWrongNote(filePath);
+	async deleteWrongNote(filePath: string, skipRebuild = false): Promise<void> {
+		return this.vaultData.deleteWrongNote(filePath, skipRebuild);
 	}
 
 	async exportToFile(text: string, defaultName: string, format: "md" | "word" | "pdf", title?: string, source?: string): Promise<void> {
@@ -109,8 +151,15 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		return this.knowledgeService.migrateKnowledgeLinks();
 	}
 
-	async activateSidebar(): Promise<MainSidebarView | null> {
-		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
+	/** 语言切换后刷新已打开的侧边栏头部/导航文案。 */
+	refreshSidebarChrome() {
+		for (const leaf of this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE)) {
+			const view = leaf.view as MainSidebarView;
+			view.refreshChrome?.();
+		}
+	}
+
+	async activateSidebar(): Promise<MainSidebarView | null> {		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 		if (leaves.length > 0) {
 			await this.app.workspace.revealLeaf(leaves[0]!);
 			return leaves[0]!.view as MainSidebarView;
@@ -176,6 +225,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				try {
 					await this.migrateOldWrongAnswers();
 					await this.migrateKnowledgeLinks();
+					await this.cleanupLegacyChatWorkspaces();
 				} catch (err) { logError("startup migration", err); }
 			})();
 			if (this.settings.autoReviewReminder) {
@@ -221,6 +271,19 @@ export default class QuestionGeneratorPlugin extends Plugin {
 			callback: async () => {
 				const view = await this.activateSidebar();
 				if (view) { view.activeSection = "home"; view.openGeneratePicker(); }
+			}
+		});
+		this.addCommand({
+			id: "generate-from-active",
+			name: t("基于当前文档直接生成试题"),
+			callback: async () => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== "md") { new Notice(t("请先打开一个Markdown文档")); return; }
+				try {
+					const text = await this.app.vault.read(file);
+					const view = await this.activateSidebar();
+					if (view) { view.activeSection = "home"; view.homeView = "generate"; view.genSourceText = text; view.genFileName = file.name; view.genSourcePath = file.path; await view.render(); }
+				} catch (e) { logError("read active file", e); }
 			}
 		});
 		this.addCommand({
@@ -290,25 +353,6 @@ export default class QuestionGeneratorPlugin extends Plugin {
 				logError("editor-menu error", e);
 			}
 		}));
-
-		this.registerDomEvent(document, "keydown", (evt: KeyboardEvent) => {
-			try {
-				if (evt.ctrlKey && evt.key === "q") {
-					evt.preventDefault();
-					const file = this.app.workspace.getActiveFile();
-					if (file && file.extension === "md") {
-						this.app.vault.read(file).then(async text => {
-							const view = await this.activateSidebar();
-							if (view) { view.activeSection = "home"; view.homeView = "generate"; view.genSourceText = text; view.genFileName = file.name; view.genSourcePath = file.path; await view.render(); }
-						}).catch(e => logError("read active file", e));
-					} else {
-						new Notice(t("请先打开一个Markdown文档再使用 Ctrl+Q"));
-					}
-				}
-			} catch (e) {
-				logError("keydown error", e);
-			}
-		});
 	}
 	onunload() {
 		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
@@ -318,11 +362,14 @@ export default class QuestionGeneratorPlugin extends Plugin {
 
 // ===================== 公共导出（保持向后兼容） =====================
 export { t, tf, setLanguage, getLanguage, zh, en } from "./i18n/index";
-export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE } from "./constants";
-export { parseFM, buildFM, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
-export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, deleteFileAbs, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
-export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, htmlEscape } from "./utils/text";
-export { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate, todayStr, isDueForReview } from "./utils/review";
+export { DEFAULT_SETTINGS, SYSTEM_TAGS, SIDEBAR_VIEW_TYPE, EASE_PRESETS, EASE_MIN, EASE_MAX } from "./constants";
+export { parseFM, buildFM, patchFrontmatter, knowledgeTags, buildKnowledgeLinks } from "./utils/frontmatter";
+export { isAbs, daysUntil, ensureFolderAbs, writeFileStr, readFileStr, listMdFiles, listMdFilesRecursive, listFilesRecursive, isImageFile, isDocumentFile, IMAGE_EXTS, DOCUMENT_EXTS, EXAM_SOURCE_EXTS, trashFileAbs, TRASH_DIR_NAME, ensureFolder, parseExcludeFolderNames, isExcludedPath, joinPath } from "./utils/fs-utils";
+export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, extractAnswersForExport, htmlEscape } from "./utils/text";
+export { todayStr, isDueForReview } from "./utils/review";
+export { sm2Update, clampEase, DEFAULT_EASE_FACTOR, MIN_EASE_FACTOR, QUALITY } from "./utils/sm2";
+export { localDateStr, addDaysStr } from "./utils/date";
+export { loadSessions, listSessionIds, loadSession, saveSession, createSession, deleteSession, renameSession, setSessionScope, setActiveSession, loadMeta, saveMeta, autoTitle, genId, capMessages, type ChatAdapter } from "./utils/chatStorage";
 export { stripMd, parseQuestions } from "./utils/parse";
 export { extractKnowledgeTags } from "./utils/tags";
 export { debounce } from "./utils/debounce";

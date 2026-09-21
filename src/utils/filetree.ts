@@ -1,7 +1,6 @@
-import type { TFile } from "obsidian";
-import type { TreeNode } from "../types";
+import type { FileMeta, TreeNode } from "../types";
 
-export function buildFileTree(files: TFile[]): TreeNode {
+export function buildFileTree(files: FileMeta[]): TreeNode {
 	const root: TreeNode = { name: "", path: "", isFolder: true, children: [] };
 	for (const file of files) {
 		const parts = file.path.split("/");

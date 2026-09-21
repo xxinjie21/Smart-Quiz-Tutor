@@ -1,14 +1,17 @@
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 
 import type { MainSidebarView } from "../sidebarView";
-import type { WrongAnswerNote } from "../../types";
-import { EXAM_SOURCE_EXTS, isImageFile, readFileStr, isAbs, ensureFolder, joinPath, writeFileStr } from "../../utils/fs-utils";
+import type { WrongAnswerNote, FileMeta } from "../../types";
+import { EXAM_SOURCE_EXTS, isImageFile, isAbs, ensureFolder, joinPath, writeFileStr } from "../../utils/fs-utils";
 import { SEARCH_DEBOUNCE_MS } from "../../constants";
 import { debounce } from "../../utils/debounce";
 import { safeName } from "../../utils/text";
 import { buildKnowledgeLinks } from "../../utils/frontmatter";
 import { buildNotePrompt, parseNoteResult, buildNoteFrontmatter, type NoteGenSourceType } from "../../services/noteService";
 import { getLanguage, t, tf } from "../../i18n/index";
+import { localDateStr } from "../../utils/date";
+import { clampEase } from "../../utils/sm2";
+import { backButton, emptyState } from "./shared/ui";
 
 export async function renderNoteGenView(view: MainSidebarView) {
 	if (!view.innerContentEl) return;
@@ -16,8 +19,7 @@ export async function renderNoteGenView(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-	backBtn.addEventListener("click", () => {
+	backButton(el, () => {
 		view.cancelAI();
 		if (view.noteGenMode === "preview" && view.noteGenResultText) {
 			view.noteGenMode = "picker";
@@ -36,7 +38,7 @@ export async function renderNoteGenView(view: MainSidebarView) {
 		const status = el.createDiv({ attr: { style: "text-align:center;padding:40px 0;font-size:18px;color:var(--text-muted);" } });
 		status.createDiv({ text: t("🤖 正在批量生成笔记...") });
 		status.createDiv({ text: t("点击停止可中断，已完成的笔记会被保留"), attr: { style: "font-size:15px;margin-top:8px;color:var(--text-faint);" } });
-		const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+		const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 		stopBtn.addEventListener("click", () => view.cancelAI());
 		return;
 	}
@@ -69,7 +71,7 @@ export async function renderNoteGenView(view: MainSidebarView) {
 		const activeFile = view.app.workspace.getActiveFile();
 		const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 		if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-			listWrap.createDiv({ text: t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+			emptyState(listWrap, t("请先打开一个文档（md/txt/rtf/docx/pdf/图片）"));
 		} else {
 			const info = listWrap.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
 			info.createSpan({ text: t("当前文件：") });
@@ -110,7 +112,7 @@ export async function renderNoteGenView(view: MainSidebarView) {
 	if (view.noteGenSourceType === "wrong") {
 		view.noteGenWrongNotes = await view.plugin.loadAllWrongNotes();
 		if (view.noteGenWrongNotes.length === 0) {
-			listWrap.createDiv({ text: t("暂无错题记录"), attr: { style: "color:var(--text-faint);text-align:center;padding:30px 0;font-size:19px;" } });
+			emptyState(listWrap, t("暂无错题记录"));
 		} else {
 			const infoEl = listWrap.createDiv({ attr: { style: "color:var(--text-muted);font-size:18px;margin-bottom:6px;" } });
 			const listEl = listWrap.createDiv({ attr: { style: "max-height:360px;overflow-y:auto;border:1px solid var(--background-modifier-border);border-radius:6px;padding:6px 8px;" } });
@@ -165,7 +167,7 @@ function renderNoteGenPreview(view: MainSidebarView, el: HTMLElement) {
 		const status = el.createDiv({ attr: { style: "text-align:center;padding:40px 0;font-size:18px;color:var(--text-muted);" } });
 		status.createSpan({ text: t("🤖 正在生成笔记...") });
 		status.createDiv({ text: tf("根据「{name}」生成中，请稍候", { name: view.noteGenTargetName || "" }), attr: { style: "font-size:16px;margin-top:8px;color:var(--text-faint);" } });
-		const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+		const stopBtn = status.createEl("button", { text: t("⏹ 停止"), attr: { style: "margin-top:14px;padding:6px 18px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 		stopBtn.addEventListener("click", () => view.cancelAI());
 		return;
 	}
@@ -200,7 +202,7 @@ function renderNoteGenPreview(view: MainSidebarView, el: HTMLElement) {
 	plain(t("取消返回"), () => { view.noteGenResultText = ""; view.noteGenMode = "picker"; void view.renderNoteGenView(); });
 }
 
-function noteGenFindItem(view: MainSidebarView, key: string): { name: string; sourcePath: string; file?: TFile; wrongNote?: WrongAnswerNote } | null {
+function noteGenFindItem(view: MainSidebarView, key: string): { name: string; sourcePath: string; file?: FileMeta; wrongNote?: WrongAnswerNote } | null {
 	if (view.noteGenSourceType === "wrong") {
 		const n = view.noteGenWrongNotes.find(n => n.filePath === key);
 		if (n) return { name: (n.sourceFile || n.baseName).replace(/\[\[|\]\]/g, ""), sourcePath: n.sourcePath || n.filePath, wrongNote: n };
@@ -211,13 +213,13 @@ function noteGenFindItem(view: MainSidebarView, key: string): { name: string; so
 	return null;
 }
 
-async function noteGenItemContent(view: MainSidebarView, item: { name: string; sourcePath: string; file?: TFile; wrongNote?: WrongAnswerNote }): Promise<string> {
+async function noteGenItemContent(view: MainSidebarView, item: { name: string; sourcePath: string; file?: FileMeta; wrongNote?: WrongAnswerNote }): Promise<string> {
 	if (item.wrongNote) return item.wrongNote.resultText;
 	if (item.file) return await noteSourceToText(view, item.file);
 	return "";
 }
 
-async function noteSourceToText(view: MainSidebarView, file: TFile): Promise<string> {
+async function noteSourceToText(view: MainSidebarView, file: FileMeta): Promise<string> {
 	if (isImageFile(file.name)) {
 		const b64 = await view.readFileAsBase64(file);
 		new Notice(t("图片识别：请确认当前模型支持多模态（视觉）能力"));
@@ -227,7 +229,7 @@ async function noteSourceToText(view: MainSidebarView, file: TFile): Promise<str
 		return await view.callAIWithPrompt(prompt, [b64]);
 	}
 	if (file.extension === "md") {
-		const text = isAbs(file.path) ? readFileStr(file.path) : await view.app.vault.read(file);
+		const text = await view.readFileText(file);
 		return text.replace(/^---[\s\S]*?---\s*/, "");
 	}
 	return await view.examSourceToText(file);
@@ -338,8 +340,8 @@ async function noteGenWriteNote(view: MainSidebarView, body: string, tags: strin
 	if (!folder) { new Notice(t("请先在设置中配置笔记文件夹")); return false; }
 	try {
 		await ensureFolder(view.app, folder);
-		const dateStr = new Date().toISOString().slice(0, 10);
-		const fm = buildNoteFrontmatter(sourceName, sourcePath, tags);
+		const dateStr = localDateStr();
+		const fm = buildNoteFrontmatter(sourceName, sourcePath, tags, undefined, clampEase(view.plugin.settings.noteEaseFactor));
 		const knowledgeLinks = buildKnowledgeLinks(tags);
 		const content = fm + body + knowledgeLinks;
 		const baseName = safeName(sourceName || "AI笔记");

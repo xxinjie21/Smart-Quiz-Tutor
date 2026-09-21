@@ -1,5 +1,7 @@
 import { Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { getElectronRemote } from "./electron";
 import {
 	FONT, FSBody, FSSmall, AnswerColor, ExplainColor,
@@ -7,6 +9,7 @@ import {
 	splitAnswerContent, splitSemantic, stripAnswerSummarySection,
 } from "./layout";
 import { htmlEscape } from "./text";
+import { localDateStr } from "./date";
 
 function pushPara(children: Paragraph[], opts: { runs?: TextRun[]; spacing?: { before?: number; after?: number; line?: number }; indent?: { left?: number; right?: number }; alignment?: (typeof AlignmentType)[keyof typeof AlignmentType]; heading?: (typeof HeadingLevel)[keyof typeof HeadingLevel] }) {
 	if (opts.runs) {
@@ -32,8 +35,40 @@ export type ExamBlock =
 
 const EXAM_ANSWER_LINE = /^(?:\*\*)?(?:答案|标准答案|参考答案|Answer|Reference Answer)(?:\*\*)?[：:]/i;
 const EXAM_EXPLAIN_LINE = /^(?:\*\*)?(?:解析|Explanation)(?:\*\*)?[：:]/i;
-const EXAM_NUM_LINE = /^\d+[.、]/;
+/**
+ * 题号行：兼容裸题号 `1.` 与提示词要求的加粗形式 `**1.**`。
+ * 提示词（QUESTION_FORMAT_RULES 铁律 2）强制 AI 输出加粗题号，
+ * 且 `validateGenerated()` 也只认加粗形式，因此导出侧必须能识别。
+ */
+const EXAM_NUM_LINE = /^(?:\*\*)?\d+(?:\*\*)?[.、]/;
+const EXAM_OPTION_LINE = /^(?:\*\*)?[A-D](?:\*\*)?[.、]/;
+const EXAM_SUBITEM_LINE = /^(?:\*\*)?\(\d+\)/;
 const EXAM_HEADING_LINE = /^#{1,6}\s+/;
+
+/**
+ * 归一化行首的 Markdown 加粗标记，避免 `**1.**` 这类字面量泄漏到 Word/PDF 里。
+ * 优先只处理「题号/选项/要点前缀被加粗」这一常见形式，其次才处理行首整段加粗。
+ */
+export function stripMdBold(line: string): string {
+	// 两组星号有两种位置，都要处理：
+	//   `**1.**` = ** + `1` + `.` + **  —— 点号在星号之内（插件 prompt 要求 AI 输出的写法）
+	//   `**1**.` = ** + `1` + ** + `.`  —— 点号在星号之外（模型常见的另一种写法）
+	const normalized = line
+		.replace(/^\*\*(\d+)([.、])\*\*/, "$1$2")
+		.replace(/^\*\*(\d+)\*\*([.、])?/, "$1$2")
+		.replace(/^\*\*([A-D])([.、])\*\*/, "$1$2")
+		.replace(/^\*\*([A-D])\*\*([.、])?/, "$1$2")
+		.replace(/^\*\*\((\d+)\)\*\*/, "($1)");
+	if (normalized !== line) return normalized;
+	// 兜底：行首整段加粗。只吃配对的那一组 `**`，不要盲切末尾，否则
+	// `**重点** 补充说明` 会被切成 `重点** 补充说明`（残留星号）。
+	if (normalized.startsWith("**")) {
+		const close = normalized.indexOf("**", 2);
+		if (close > 2) return normalized.slice(2, close) + normalized.slice(close + 2);
+		return normalized.slice(2);
+	}
+	return normalized;
+}
 
 export function parseExamBlocks(text: string): ExamBlock[] {
 	const rawLines = stripAnswerSummarySection(text).split("\n");
@@ -50,15 +85,15 @@ export function parseExamBlocks(text: string): ExamBlock[] {
 			continue;
 		}
 		if (EXAM_NUM_LINE.test(trimmed)) {
-			blocks.push({ type: "question", parts: [trimmed], hasInline: true });
+			blocks.push({ type: "question", parts: [stripMdBold(trimmed)], hasInline: true });
 			continue;
 		}
-		if (/^[A-D][.、]/.test(trimmed)) {
-			blocks.push({ type: "option", parts: [trimmed], hasInline: true });
+		if (EXAM_OPTION_LINE.test(trimmed)) {
+			blocks.push({ type: "option", parts: [stripMdBold(trimmed)], hasInline: true });
 			continue;
 		}
-		if (/^\(\d+\)/.test(trimmed)) {
-			blocks.push({ type: "subitem", parts: [trimmed], hasInline: true });
+		if (EXAM_SUBITEM_LINE.test(trimmed)) {
+			blocks.push({ type: "subitem", parts: [stripMdBold(trimmed)], hasInline: true });
 			continue;
 		}
 		if (/^[*>\s]*(?:补充说明|Note)[：:]/.test(trimmed)) {
@@ -211,7 +246,7 @@ export function buildWordParagraphs(text: string, title?: string, source?: strin
 }
 
 export function buildExportHtml(text: string, title?: string, source?: string): string {
-	const dateStr = new Date().toISOString().slice(0, 10);
+	const dateStr = localDateStr();
 	const parts: string[] = [];
 
 	if (title) parts.push('<h1 style="text-align:center;margin:0 0 2px;font-size:27px;">' + highlightTechHtml(htmlEscape(title)) + '</h1>');
@@ -282,16 +317,34 @@ export function buildExportHtml(text: string, title?: string, source?: string): 
 	return '<html><head><meta charset="utf-8"><style>body{padding:40px 50px;max-width:900px;margin:0 auto;font-family:"Microsoft YaHei","PingFang SC",sans-serif;font-size:20px;color:#333;}h1{font-size:27px;font-weight:700;text-align:center;color:#222;}p{margin:2px 0;}strong{font-weight:600;}</style></head><body>' + body + '</body></html>';
 }
 
-export async function exportPdfDirect(filePath: string, text: string, title?: string, source?: string) {
-	const fullHtml = buildExportHtml(text, title, source);
-	
+/** 串行化 PDF 导出：隐藏窗口 + printToPDF 是共享资源，并发会互相干扰。 */
+let pdfExportChain: Promise<void> = Promise.resolve();
+
+async function renderPdfToFile(fullHtml: string, filePath: string): Promise<void> {
 	const { BrowserWindow } = getElectronRemote();
 	const win = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { offscreen: true } });
+	let tmpPath = "";
 	try {
-		await win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(fullHtml));
+		// data URL 在 Chromium 下有长度上限（长试卷会被截断甚至加载失败），改用临时文件加载
+		tmpPath = path.join(
+			os.tmpdir(),
+			"qg-pdf-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8) + ".html",
+		);
+		fs.writeFileSync(tmpPath, fullHtml, "utf-8");
+		await win.loadFile(tmpPath);
 		const pdfData = await win.webContents.printToPDF({ printBackground: true, pageSize: "A4", marginTop: 0.6, marginBottom: 0.6, marginLeft: 0.5, marginRight: 0.5 });
 		fs.writeFileSync(filePath, pdfData);
 	} finally {
-		win.close();
+		try { win.close(); } catch { /* ignore */ }
+		// 清掉本次导出用的临时 HTML（我们自己创建的中间文件，不属于用户数据）
+		if (tmpPath) { try { fs.unlinkSync(tmpPath); } catch { /* ignore */ } }
 	}
+}
+
+export async function exportPdfDirect(filePath: string, text: string, title?: string, source?: string) {
+	const fullHtml = buildExportHtml(text, title, source);
+	const run = pdfExportChain.then(() => renderPdfToFile(fullHtml, filePath));
+	// 让链在失败后仍可继续，但把错误抛给本次调用方
+	pdfExportChain = run.then(() => undefined, () => undefined);
+	return run;
 }

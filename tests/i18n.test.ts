@@ -1,8 +1,32 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
 import { t, tf, setLanguage, getLanguage, zh, en } from "../src/i18n/index";
 import { buildGeneratePrompt, buildExamExtractPrompt } from "../src/services/questionService";
 import { buildNotePrompt } from "../src/services/noteService";
 import { buildTaggingPrompt } from "../src/services/knowledgeService";
+
+function walkTs(dir: string, out: string[] = []): string[] {
+	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+		const p = path.join(dir, e.name);
+		if (e.isDirectory()) walkTs(p, out);
+		else if (e.name.endsWith(".ts")) out.push(p);
+	}
+	return out;
+}
+
+function collectTKeys(): string[] {
+	const keys = new Set<string>();
+	const re = /\btf?\(\s*"((?:[^"\\]|\\.)*)"/g;
+	for (const f of walkTs("src")) {
+		const s = fs.readFileSync(f, "utf8");
+		let m: RegExpExecArray | null;
+		while ((m = re.exec(s))) {
+			try { keys.add(JSON.parse('"' + m[1] + '"')); } catch { keys.add(m[1]); }
+		}
+	}
+	return [...keys];
+}
 
 describe("i18n 字典", () => {
 	it("en 必须覆盖 zh 的所有 key", () => {
@@ -12,6 +36,10 @@ describe("i18n 字典", () => {
 	});
 	it("zh 的 value 与 key 相同（原文即 key）", () => {
 		for (const [k, v] of Object.entries(zh)) expect(v).toBe(k);
+	});
+	it("源码里 t()/tf() 的字面量键都在字典中（英文不再回退中文）", () => {
+		const missing = collectTKeys().filter(k => !(k in zh) || !(k in en));
+		expect(missing).toEqual([]);
 	});
 });
 

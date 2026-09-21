@@ -3,9 +3,10 @@ import { Notice, TFile } from "obsidian";
 import type { MainSidebarView } from "../sidebarView";
 import { SEARCH_DEBOUNCE_MS } from "../../constants";
 import { debounce } from "../../utils/debounce";
-import { parseFM, buildFM } from "../../utils/frontmatter";
+import { parseFM, patchFrontmatter } from "../../utils/frontmatter";
 import { buildTaggingPrompt, parseTaggedResult } from "../../services/knowledgeService";
 import { t, tf } from "../../i18n/index";
+import { backButton, emptyState } from "./shared/ui";
 
 function loadTaggerFiles(view: MainSidebarView) {
 	const excludeList = view.buildExcludeList();
@@ -23,8 +24,7 @@ export async function renderTaggerView(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-	backBtn.addEventListener("click", () => { view.cancelAI(); view.fpSelected.clear(); view.taggerStatusText = ""; view.homeView = "default"; void view.renderHomeTab(); });
+	backButton(el, () => { view.cancelAI(); view.fpSelected.clear(); view.taggerStatusText = ""; view.homeView = "default"; void view.renderHomeTab(); });
 	el.createDiv({ text: t("AI添加标签"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
 	el.createDiv({ text: t("AI识别文档中的知识点，自动写入frontmatter，用于Obsidian知识图谱"), attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
 
@@ -41,7 +41,7 @@ export async function renderTaggerView(view: MainSidebarView) {
 	if (view.taggerMode === "current") {
 		const activeFile = view.app.workspace.getActiveFile();
 		if (!activeFile || activeFile.extension !== "md") {
-			el.createDiv({ text: t("请先打开一个Markdown文件"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+			emptyState(el, t("请先打开一个Markdown文件"));
 		} else {
 			const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
 			info.createSpan({ text: t("当前文件：") });
@@ -51,7 +51,7 @@ export async function renderTaggerView(view: MainSidebarView) {
 			const processBtn = btnRow.createEl("button", { text: view.taggerProcessing ? t("处理中...") : t("🤖 开始识别标签"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--interactive-accent);background:var(--interactive-accent);color:var(--text-on-accent);" + (view.taggerProcessing ? "opacity:0.5;pointer-events:none;" : "") } });
 			processBtn.addEventListener("click", () => { void runAITagging(view, [activeFile]); });
 			if (view.taggerProcessing) {
-				const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+				const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 20px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 				stopBtn.addEventListener("click", () => view.cancelAI());
 			}
 		}
@@ -78,7 +78,7 @@ export async function renderTaggerView(view: MainSidebarView) {
 		const clearBtn = btnRow.createEl("button", { text: t("清空选择"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);" } });
 		clearBtn.addEventListener("click", () => { view.fpSelected.clear(); rerender(); });
 		if (view.taggerProcessing) {
-			const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+			const stopBtn = btnRow.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:8px 16px;border-radius:4px;font-size:19px;cursor:pointer;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 			stopBtn.addEventListener("click", () => view.cancelAI());
 		}
 		const updateConfirm = () => {
@@ -130,12 +130,11 @@ export async function runAITagging(view: MainSidebarView, files: TFile[]) {
 			const tags = parseTaggedResult(full);
 			if (tags.length === 0) { failCount++; continue; }
 
-			const { meta, body } = parseFM(content);
+			const { meta } = parseFM(content);
 			const oldTags = Array.isArray(meta.tags) ? meta.tags : [];
 			const mergedTags = [...new Set([...oldTags, ...tags])];
-			const newFM = { ...meta, tags: mergedTags };
-			const newContent = buildFM(newFM) + body;
-			await view.app.vault.modify(file, newContent);
+			// Patch only `tags` so the user's other frontmatter keys survive untouched.
+			await view.app.vault.modify(file, patchFrontmatter(content, { tags: mergedTags }));
 			successCount++;
 		} catch (err) {
 			if ((err as Error).name === "AbortError") {

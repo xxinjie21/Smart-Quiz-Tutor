@@ -1,6 +1,7 @@
 import { buildFM } from "../utils/frontmatter";
 import type { FmValue } from "../types";
-import { DEFAULT_NOTE_INTERVALS } from "../utils/review";
+import { localDateStr, addDaysStr } from "../utils/date";
+import { DEFAULT_EASE_FACTOR } from "../utils/sm2";
 import { getLanguage } from "../i18n/index";
 
 export type NoteGenSourceType = "current" | "doc" | "question" | "wrong" | "note";
@@ -101,19 +102,20 @@ export function parseNoteResult(text: string): { tags: string[]; body: string } 
 	return { tags, body: body.trim() };
 }
 
-export function buildNoteFrontmatter(sourceName: string, sourcePath: string, tags: string[], extra?: Record<string, FmValue>, noteIntervals?: number[]): string {
-	const ivls = noteIntervals && noteIntervals.length > 0 ? noteIntervals : DEFAULT_NOTE_INTERVALS;
-	const next = new Date();
-	next.setDate(next.getDate() + (ivls[0] || DEFAULT_NOTE_INTERVALS[0]!));
+export function buildNoteFrontmatter(sourceName: string, sourcePath: string, tags: string[], extra?: Record<string, FmValue>, initialEase?: number): string {
+	const dateStr = localDateStr();
 	return buildFM({
-		date: new Date().toISOString().slice(0, 10),
+		date: dateStr,
 		source: sourceName ? "[[" + sourceName.replace(/\[\[|\]\]/g, "") + "]]" : "",
 		sourcePath,
 		tags,
-		nextReview: next.toISOString().slice(0, 10),
-		interval: ivls[0] || DEFAULT_NOTE_INTERVALS[0]!,
+		nextReview: addDaysStr(dateStr, 1),
+		interval: 1,
 		correctCount: 0,
 		wrongCount: 0,
+		easeFactor: initialEase ?? DEFAULT_EASE_FACTOR,
+		repetitions: 0,
+		lapses: 0,
 		...extra,
 	});
 }

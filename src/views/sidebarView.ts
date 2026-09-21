@@ -1,17 +1,18 @@
 import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import * as fs from "fs";
+import * as path from "path";
 
 import type QuestionGeneratorPlugin from "../main";
 import {
 	SIDEBAR_VIEW_TYPE,
 	AI_REQUEST_TIMEOUT_MS,
 } from "../constants";
-import type { WrongAnswerNote, ParsedQuestion, TreeNode } from "../types";
+import type { WrongAnswerNote, ParsedQuestion, TreeNode, FmValue, FileMeta } from "../types";
 import type { IndexSource } from "../services/knowledgeService";
-import { parseFM, buildFM, knowledgeTags } from "../utils/frontmatter";
-import { isAbs, writeFileStr, readFileStr, ensureFolder, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS, joinPath } from "../utils/fs-utils";
+import { patchFrontmatter, knowledgeTags } from "../utils/frontmatter";
+import { isAbs, writeFileStr, readFileStr, ensureFolder, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS, joinPath, trashFileAbs } from "../utils/fs-utils";
 import { convertDocumentToText } from "../services/documentService";
-import { DEFAULT_WRONG_INTERVALS, DEFAULT_QUESTION_INTERVALS, DEFAULT_NOTE_INTERVALS, parseReviewIntervals, reviewUpdate } from "../utils/review";
+import { sm2Update, DEFAULT_EASE_FACTOR, type Sm2Result } from "../utils/sm2";
 import { buildFileTree } from "../utils/filetree";
 import { getElectronRemote } from "../utils/electron";
 import { chatLLM, type ChatLLMOptions } from "../services/llmService";
@@ -20,6 +21,7 @@ import { buildTaggingPrompt, parseTaggedResult } from "../services/knowledgeServ
 import type { NoteGenSourceType } from "../services/noteService";
 import { t, tf, getLanguage } from "../i18n/index";
 import { ChatPanel } from "./chatPanel";
+import { openConfirm } from "./ui/modals";
 import { renderSettingsTab as renderSettingsSection } from "./sidebar/settings";
 import { renderHistoryView as renderHistorySection } from "./sidebar/history";
 import { renderKnowledgeManager as renderKnowledgeManagerSection } from "./sidebar/knowledge";
@@ -28,8 +30,8 @@ import { startAnswer as startAnswerSection, renderAnswerView as renderAnswerView
 import { renderTaggerView as renderTaggerViewSection, runAITagging as runAITaggingSection } from "./sidebar/tagger";
 import { renderExamBrowser as renderExamBrowserSection, extractFromExamSelected as extractFromExamSelectedSection, openCurrentFileExtract as openCurrentFileExtractSection } from "./sidebar/exam";
 import { renderNoteGenView as renderNoteGenViewSection, noteGenStartDirect as noteGenStartDirectSection } from "./sidebar/noteGen";
-import { renderFilePicker as renderFilePickerSection, generateFromCurrentFile as generateFromCurrentFileSection, generateFromSelected as generateFromSelectedSection, loadPickerFiles as loadPickerFilesSection, startGenerate as startGenerateSection, renderGenerateView as renderGenerateViewSection, genStartGenerate as genStartGenerateSection, genRunGenerate as genRunGenerateSection, genRenderResult as genRenderResultSection, genSaveToVault as genSaveToVaultSection, genExportMd as genExportMdSection, genExportWord as genExportWordSection, genExportPdf as genExportPdfSection, genExportNoAnswer as genExportNoAnswerSection, generateFromWeakPoints as generateFromWeakPointsSection, openGeneratePicker as openGeneratePickerSection } from "./sidebar/generate";
-import { renderWrongTab as renderWrongTabSection, renderWrongList as renderWrongListSection, renderWrongNoteItem as renderWrongNoteItemSection, renderWrongDetail as renderWrongDetailSection, wrongDeleteNote as wrongDeleteNoteSection, wrongRePracticeSingle as wrongRePracticeSingleSection, wrongRePracticeDue as wrongRePracticeDueSection, wrongExportNote as wrongExportNoteSection } from "./sidebar/wrong";
+import { renderFilePicker as renderFilePickerSection, generateFromCurrentFile as generateFromCurrentFileSection, generateFromSelected as generateFromSelectedSection, loadPickerFiles as loadPickerFilesSection, startGenerate as startGenerateSection, renderGenerateView as renderGenerateViewSection, genStartGenerate as genStartGenerateSection, genRunGenerate as genRunGenerateSection, genRenderResult as genRenderResultSection, genSaveToVault as genSaveToVaultSection, genExportMd as genExportMdSection, genExportWord as genExportWordSection, genExportPdf as genExportPdfSection, genExportNoAnswer as genExportNoAnswerSection, genExportAnswerOnly as genExportAnswerOnlySection, generateFromWeakPoints as generateFromWeakPointsSection, openGeneratePicker as openGeneratePickerSection } from "./sidebar/generate";
+import { renderWrongTab as renderWrongTabSection, renderWrongList as renderWrongListSection, renderWrongNoteItem as renderWrongNoteItemSection, renderWrongDetail as renderWrongDetailSection, wrongDeleteNote as wrongDeleteNoteSection, wrongRePracticeSingle as wrongRePracticeSingleSection, wrongRePracticeDue as wrongRePracticeDueSection, wrongExportNote as wrongExportNoteSection, wrongExportAnswerOnly as wrongExportAnswerOnlySection } from "./sidebar/wrong";
 import { listQuestionFiles as listQuestionFilesSection, renderQuestionsTab as renderQuestionsTabSection } from "./sidebar/questions";
 import { renderNotesTab as renderNotesTabSection, renderNotePicker as renderNotePickerSection, listNoteViewFiles as listNoteViewFilesSection } from "./sidebar/notes";
 import { getActivityData as getActivityDataSection, renderHeatmap as renderHeatmapSection, renderHomeDefault as renderHomeDefaultSection, getStats as getStatsSection, getDueNotes as getDueNotesSection } from "./sidebar/home";
@@ -104,7 +106,7 @@ export class MainSidebarView extends ItemView {
 	noteGenSourceType: NoteGenSourceType = "doc";
 	noteGenMode: "picker" | "preview" = "picker";
 	noteGenSelected: Set<string> = new Set();
-	noteGenFiles: TFile[] = [];
+	noteGenFiles: FileMeta[] = [];
 	noteGenWrongNotes: WrongAnswerNote[] = [];
 	noteGenResultText = "";
 	noteGenResultTags: string[] = [];
@@ -146,6 +148,16 @@ export class MainSidebarView extends ItemView {
 		this.navIndicatorEl = null;
 	}
 
+	/** 语言切换后重建头部、导航与聊天面板（其文案是构建时生成的）。 */
+	refreshChrome() {
+		this.navEl = null;
+		this.navButtons.clear();
+		this.innerContentEl = null;
+		this.chatPanel?.destroy();
+		this.chatPanel = null;
+		void this.render();
+	}
+
 	async render() {
 		const container = this.containerEl.children[1] as HTMLElement;
 		if (!container) return;
@@ -164,6 +176,8 @@ export class MainSidebarView extends ItemView {
 			};
 			zoomBtn("A−", -0.05, t("缩小字号"));
 			zoomBtn("A+", 0.05, t("放大字号"));
+			const resetBtn = zoomCtl.createEl("button", { text: "↺", cls: "qg-zoom-btn", attr: { title: t("字号复位"), "aria-label": t("字号复位") } });
+			resetBtn.addEventListener("click", () => this.adjustZoom(1 - (this.plugin.settings.sidebarZoom || 1)));
 
 			const nav = container.createDiv({ cls: "qg-nav", attr: { style: "display:flex;margin:0 14px 12px;" } });
 			const navItems: { key: "home" | "questions" | "notes" | "wrong" | "review" | "chat" | "settings"; label: string; icon: string }[] = [
@@ -242,8 +256,10 @@ export class MainSidebarView extends ItemView {
 		if (!this.innerContentEl) return;
 		if (!this.chatPanel) {
 			this.chatPanel = new ChatPanel(this.plugin, this.innerContentEl, this);
+			void this.chatPanel.startup().catch(() => { /* startup 内部已处理错误 */ });
 		} else {
 			this.innerContentEl.appendChild(this.chatPanel.rootEl);
+			this.chatPanel.populate();
 			this.chatPanel.renderMessages();
 		}
 	}
@@ -272,7 +288,7 @@ renderHeatmap(container: HTMLElement, activity: Record<string, number>, year: st
 async renderHomeDefault() { return renderHomeDefaultSection(this); }
 
 	// ===================== QUESTIONS TAB =====================
-async listQuestionFiles(folder: string): Promise<TFile[]> { return listQuestionFilesSection(this, folder); }
+async listQuestionFiles(folder: string): Promise<FileMeta[]> { return listQuestionFilesSection(this, folder); }
 
 async renderQuestionsTab() { return renderQuestionsTabSection(this); }
 
@@ -281,14 +297,14 @@ async renderNotesTab() { return renderNotesTabSection(this); }
 
 renderNotePicker(el: HTMLDivElement) { return renderNotePickerSection(this, el); }
 
-async listNoteViewFiles(folder: string): Promise<TFile[]> { return listNoteViewFilesSection(this, folder); }
+async listNoteViewFiles(folder: string): Promise<FileMeta[]> { return listNoteViewFilesSection(this, folder); }
 
 	// ===================== WRONG TAB =====================
 async renderWrongTab() { return renderWrongTabSection(this); }
 
 async renderWrongList() { return renderWrongListSection(this); }
 
-renderWrongNoteItem(container: HTMLDivElement, note: WrongAnswerNote) { return renderWrongNoteItemSection(this, container, note); }
+renderWrongNoteItem(container: HTMLElement, note: WrongAnswerNote) { return renderWrongNoteItemSection(this, container, note); }
 
 renderWrongDetail() { return renderWrongDetailSection(this); }
 
@@ -299,6 +315,7 @@ async wrongRePracticeSingle(note: WrongAnswerNote) { return wrongRePracticeSingl
 async wrongRePracticeDue() { return wrongRePracticeDueSection(this); }
 
 async wrongExportNote(note: WrongAnswerNote, format: "md" | "word" | "pdf") { return wrongExportNoteSection(this, note, format); }
+async wrongExportAnswerOnly(note: WrongAnswerNote) { return wrongExportAnswerOnlySection(this, note); }
 
 	syncToKnowledgeIndex(tags: string[], label: string, filePath: string, source: IndexSource) {
 		const kTags = knowledgeTags(tags);
@@ -332,11 +349,12 @@ async wrongExportNote(note: WrongAnswerNote, format: "md" | "word" | "pdf") { re
 
 	async adminDeleteFiles(paths: string[], folder: string, rerender: () => void) {
 		if (paths.length === 0) return;
-		if (!confirm(tf("确定删除选中的 {n} 个文件？此操作不可撤销。", { n: paths.length }))) return;
+		const okConfirm = await openConfirm(this.app, { text: tf("确定删除选中的 {n} 个文件？此操作不可撤销。", { n: paths.length }) });
+		if (!okConfirm) return;
 		let ok = 0;
 		for (const p of paths) {
 			try {
-				if (isAbs(folder)) { fs.unlinkSync(p); ok++; }
+				if (isAbs(p)) { if (await trashFileAbs(p)) ok++; }
 				else { const f = this.app.vault.getAbstractFileByPath(p); if (f instanceof TFile) { await this.app.fileManager.trashFile(f); ok++; } }
 			} catch { /* skip */ }
 		}
@@ -364,40 +382,43 @@ async wrongExportNote(note: WrongAnswerNote, format: "md" | "word" | "pdf") { re
 		new Notice(tf("已导出 {n} 个文件", { n: parts.length }));
 	}
 
-	async updateReviewSchedule(note: WrongAnswerNote, source: "wrong" | "question" | "note", wasCorrect: boolean): Promise<{ correctCount: number; interval: number; nextReview: string }> {
-		const intervals = source === "wrong" ? parseReviewIntervals(this.plugin.settings.wrongReviewIntervals, DEFAULT_WRONG_INTERVALS)
-			: source === "question" ? parseReviewIntervals(this.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS)
-			: parseReviewIntervals(this.plugin.settings.noteReviewIntervals, DEFAULT_NOTE_INTERVALS);
-		const result = reviewUpdate(note.correctCount || 0, wasCorrect, intervals);
-		const wrongCount = note.wrongCount || 0;
-		const newWrongCount = wasCorrect ? wrongCount : wrongCount + 1;
+	async updateReviewSchedule(note: WrongAnswerNote, source: "wrong" | "question" | "note", quality: number): Promise<Sm2Result> {
+		const result = sm2Update({
+			easeFactor: note.easeFactor || DEFAULT_EASE_FACTOR,
+			repetitions: note.repetitions || 0,
+			interval: note.interval || 1,
+			lapses: note.lapses || 0,
+		}, quality);
+		const passed = quality >= 3;
+		const newWrongCount = (note.wrongCount || 0) + (passed ? 0 : 1);
+		const newCorrectCount = (note.correctCount || 0) + (passed ? 1 : 0);
+		const updates: Record<string, FmValue> = {
+			interval: result.interval,
+			correctCount: newCorrectCount,
+			nextReview: result.nextReview,
+			easeFactor: result.easeFactor,
+			repetitions: result.repetitions,
+			lapses: result.lapses,
+		};
+		if (source === "wrong") updates.wrongCount = newWrongCount;
 		if (isAbs(note.filePath)) {
 			const content = readFileStr(note.filePath);
-			const { meta, body } = parseFM(content);
-			meta.interval = result.interval;
-			meta.correctCount = result.correctCount;
-			meta.nextReview = result.nextReview;
-			if (source === "wrong") meta.wrongCount = newWrongCount;
-			writeFileStr(note.filePath, buildFM(meta) + body);
+			writeFileStr(note.filePath, patchFrontmatter(content, updates));
 		} else {
 			const file = this.app.vault.getAbstractFileByPath(note.filePath);
 			if (!(file instanceof TFile)) throw new Error("文件不存在");
 			const content = await this.app.vault.read(file);
-			const { meta, body } = parseFM(content);
-			meta.interval = result.interval;
-			meta.correctCount = result.correctCount;
-			meta.nextReview = result.nextReview;
-			if (source === "wrong") meta.wrongCount = newWrongCount;
-			await this.app.vault.modify(file, buildFM(meta) + body);
+			await this.app.vault.modify(file, patchFrontmatter(content, updates));
 		}
 		this.plugin.emitDataChanged();
 		return result;
 	}
 
-	async wrongUpdateScheduling(note: WrongAnswerNote, wasCorrect: boolean) {
+	async wrongUpdateScheduling(note: WrongAnswerNote, quality: number) {
 		try {
-			const result = await this.updateReviewSchedule(note, "wrong", wasCorrect);
-			new Notice(wasCorrect ? tf("正确！下次复习 {d}（间隔{i}天）", { d: result.nextReview, i: result.interval }) : t("已记录错误，明天复习"));
+			const result = await this.updateReviewSchedule(note, "wrong", quality);
+			if (quality >= 3) new Notice(tf("正确！下次复习 {d}（间隔{i}天）", { d: result.nextReview, i: result.interval }));
+			else new Notice(t("已记录错误，明天复习"));
 			this.wrongView = "list";
 			this.wrongCurrentNote = null;
 			await this.renderWrongTab();
@@ -419,7 +440,7 @@ async generateFromCurrentFile() { return generateFromCurrentFileSection(this); }
 
 async generateFromSelected() { return generateFromSelectedSection(this); }
 
-	selectInfoText(files: TFile[], selected: Set<string>): string {
+	selectInfoText(files: FileMeta[], selected: Set<string>): string {
 		const sel = files.filter(f => selected.has(f.path));
 		let size = 0;
 		let toks = 0;
@@ -428,18 +449,18 @@ async generateFromSelected() { return generateFromSelectedSection(this); }
 		return tf("共 {a} 个文档，已选 {b} 个", { a: files.length, b: selected.size }) + extra;
 	}
 
-	fileTokenEstimate(f: TFile): number {
+	fileTokenEstimate(f: FileMeta): number {
 		const size = f.stat.size;
 		const ext = f.extension.toLowerCase();
 		if (ext === "md" || ext === "txt" || ext === "rtf") return Math.ceil(size / 2);
 		return Math.ceil(size / 4);
 	}
 
-	fileSizeInfo(f: TFile): string {
+	fileSizeInfo(f: FileMeta): string {
 		return tf("大小：{s}KB　预估Token：≈{t}", { s: Math.round(f.stat.size / 1024).toLocaleString(), t: this.fileTokenEstimate(f).toLocaleString() });
 	}
 
-	renderSelectTree(listEl: HTMLDivElement, searchInput: HTMLInputElement, infoEl: HTMLElement, files: TFile[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void, expandedSet?: Set<string>) {
+	renderSelectTree(listEl: HTMLDivElement, searchInput: HTMLInputElement, infoEl: HTMLElement, files: FileMeta[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void, expandedSet?: Set<string>) {
 		listEl.empty();
 		const query = searchInput.value.toLowerCase();
 		const filtered = query ? files.filter(f => f.path.toLowerCase().includes(query) || f.basename.toLowerCase().includes(query)) : files;
@@ -447,7 +468,7 @@ async generateFromSelected() { return generateFromSelectedSection(this); }
 		this.renderSelectNode(listEl, tree, 0, infoEl, files, selected, onChanged, onSelectChange, expandedSet);
 	}
 
-	renderSelectNode(container: HTMLDivElement, node: TreeNode, depth: number, infoEl: HTMLElement, files: TFile[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void, expandedSet?: Set<string>) {
+	renderSelectNode(container: HTMLDivElement, node: TreeNode, depth: number, infoEl: HTMLElement, files: FileMeta[], selected: Set<string>, onChanged: () => void, onSelectChange?: () => void, expandedSet?: Set<string>) {
 		const sorted = [...node.children].sort((a, b) => {
 			if (a.isFolder && !b.isFolder) return -1;
 			if (!a.isFolder && b.isFolder) return 1;
@@ -508,8 +529,8 @@ async generateFromSelected() { return generateFromSelectedSection(this); }
 		}
 	}
 
-	selectFolderFiles(node: TreeNode): TFile[] {
-		const files: TFile[] = [];
+	selectFolderFiles(node: TreeNode): FileMeta[] {
+		const files: FileMeta[] = [];
 		for (const c of node.children) {
 			if (c.isFolder) files.push(...this.selectFolderFiles(c));
 			else if (c.file) files.push(c.file);
@@ -583,8 +604,48 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		}
 	}
 
-	async readFileAsBase64(file: TFile): Promise<string> {
-		const buf = await this.app.vault.readBinary(file);
+	/** 取 vault 内的真实 TFile；路径不存在或不是文件时抛错。 */
+	private vaultFile(path: string): TFile {
+		const f = this.app.vault.getAbstractFileByPath(path);
+		if (!(f instanceof TFile)) throw new Error("文件不存在：" + path);
+		return f;
+	}
+
+	/** 读取文本内容：vault 之外的文件走 fs，vault 内的走 vault API。 */
+	async readFileText(file: FileMeta): Promise<string> {
+		if (isAbs(file.path)) return readFileStr(file.path);
+		return await this.app.vault.read(this.vaultFile(file.path));
+	}
+
+	/** 删除列表项：vault 之外的文件走回收站，vault 内的走 fileManager（同样进回收站）。 */
+	async trashListFile(file: FileMeta): Promise<void> {
+		if (isAbs(file.path)) {
+			await trashFileAbs(file.path);
+			return;
+		}
+		await this.app.fileManager.trashFile(this.vaultFile(file.path));
+	}
+
+	/** 重命名列表项（同目录内改名，保持 .md）。 */
+	async renameListFile(file: FileMeta, newName: string): Promise<void> {
+		if (isAbs(file.path)) {
+			fs.renameSync(file.path, path.join(path.dirname(file.path), newName + ".md"));
+			return;
+		}
+		await this.app.vault.rename(this.vaultFile(file.path), file.path.replace(/[^/]+$/, newName + ".md"));
+	}
+
+	/** 读取原始字节：vault 之外的文件走 fs，vault 内的走 vault API。 */
+	private async readFileBytes(file: FileMeta): Promise<ArrayBuffer> {
+		if (isAbs(file.path)) {
+			const buf = fs.readFileSync(file.path);
+			return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+		}
+		return await this.app.vault.readBinary(this.vaultFile(file.path));
+	}
+
+	async readFileAsBase64(file: FileMeta): Promise<string> {
+		const buf = await this.readFileBytes(file);
 		const bytes = new Uint8Array(buf);
 		let binary = "";
 		const chunkSize = 0x8000;
@@ -594,7 +655,7 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		return btoa(binary);
 	}
 
-	async examSourceToText(file: TFile): Promise<string> {
+	async examSourceToText(file: FileMeta): Promise<string> {
 		let text = "";
 		if (isImageFile(file.name)) {
 			const b64 = await this.readFileAsBase64(file);
@@ -604,7 +665,7 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 			new Notice(t("图片识别：请确认当前模型支持多模态（视觉）能力"));
 			text = await this.callAIWithPrompt(prompt, [b64]);
 		} else if (file.extension === "md") {
-			text = await this.app.vault.read(file);
+			text = await this.readFileText(file);
 		} else if (isDocumentFile(file.name)) {
 			const absPath = await this.vaultFileToAbs(file);
 			if (!absPath) { new Notice("无法读取文件：" + file.name); return ""; }
@@ -614,7 +675,7 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		return text;
 	}
 
-	async saveConvertedMd(file: TFile, text: string) {
+	async saveConvertedMd(file: FileMeta, text: string) {
 		const folderSetting = this.plugin.settings.convertedMdFolder;
 		if (!folderSetting || file.extension.toLowerCase() === "md") return;
 		if (!text || text.trim().length === 0) return;
@@ -642,7 +703,7 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		}
 	}
 
-	async vaultFileToAbs(file: TFile): Promise<string | null> {
+	async vaultFileToAbs(file: FileMeta): Promise<string | null> {
 		try {
 			const adapter = this.app.vault.adapter as { getFullPath?: (p: string) => string };
 			if (typeof adapter.getFullPath === "function") return adapter.getFullPath(file.path);
@@ -683,6 +744,7 @@ async genExportWord() { return genExportWordSection(this); }
 async genExportPdf() { return genExportPdfSection(this); }
 
 async genExportNoAnswer() { return genExportNoAnswerSection(this); }
+async genExportAnswerOnly() { return genExportAnswerOnlySection(this); }
 
 async generateFromWeakPoints() { return generateFromWeakPointsSection(this); }
 

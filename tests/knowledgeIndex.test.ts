@@ -42,14 +42,18 @@ describe("parseIndexSections", () => {
 
 describe("isKnowledgeIndexContent", () => {
 	it("detects auto-generated index frontmatter", () => {
-		expect(isKnowledgeIndexContent("---\ntags: [知识点]\n---\n# 二次函数")).toBe(true);
 		expect(isKnowledgeIndexContent(buildIndexBody("tag", { 题目: [], 笔记: [], 错题: [] }))).toBe(true);
+		expect(isKnowledgeIndexContent(buildIndexBody("二次函数", { 题目: ["A"], 笔记: [], 错题: [] }))).toBe(true);
+		// Windows 换行也应识别
+		expect(isKnowledgeIndexContent(buildIndexBody("tag", { 题目: [], 笔记: [], 错题: [] }).replace(/\n/g, "\r\n"))).toBe(true);
 	});
 
 	it("rejects handwritten files", () => {
 		expect(isKnowledgeIndexContent("# 手写笔记\n\n正文")).toBe(false);
 		expect(isKnowledgeIndexContent("---\ntags: [数学]\n---\n# 手写")).toBe(false);
 		expect(isKnowledgeIndexContent("")).toBe(false);
+		// 手写笔记即使 frontmatter 恰好是 tags: [知识点]，只要没有索引的三段结构就不该被当成索引
+		expect(isKnowledgeIndexContent("---\ntags: [知识点]\n---\n# 我自己的知识点笔记\n\n正文内容")).toBe(false);
 	});
 });
 
@@ -98,6 +102,7 @@ describe("rebuildKnowledgeIndex stale-file cleanup", () => {
 				modify: async () => {},
 				create: async () => {},
 				getFiles: () => [],
+				getMarkdownFiles: () => [],
 			},
 			fileManager: {
 				trashFile: async (f: TFile) => {
@@ -156,6 +161,7 @@ describe("rebuildKnowledgeIndex vault-relative create+cleanup", () => {
 		const app: any = {
 			vault: {
 				getFiles: () => files,
+				getMarkdownFiles: () => files,
 				getAbstractFileByPath: (p: string) => {
 					if (p === "题目" || p === "笔记" || p === "错题" || p === "知识点") {
 						const dir = new TFolder();

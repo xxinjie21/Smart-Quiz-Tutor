@@ -1,29 +1,27 @@
 import type { WrongAnswerNote } from "../types";
-
-export const DEFAULT_WRONG_INTERVALS = [1, 2, 4, 7, 15, 30];
-export const DEFAULT_QUESTION_INTERVALS = [7, 15, 30, 60, 90];
-export const DEFAULT_NOTE_INTERVALS = [2, 6, 14, 35, 70];
-
-export function parseReviewIntervals(s: string, fallback: number[]): number[] {
-	const nums = s.split(",").map(v => parseInt(v.trim())).filter(v => v > 0);
-	return nums.length > 0 ? nums : fallback;
-}
-
-export function reviewUpdate(correctCount: number, wasCorrect: boolean, intervals?: number[]): { correctCount: number; interval: number; nextReview: string } {
-	const ivls = intervals || DEFAULT_WRONG_INTERVALS;
-	let newCorrect = wasCorrect ? correctCount + 1 : 0;
-	const idx = Math.min(newCorrect - 1, ivls.length - 1);
-	const newInterval = ivls[Math.max(idx, 0)]!;
-	const nextDate = new Date();
-	nextDate.setDate(nextDate.getDate() + newInterval);
-	return { correctCount: newCorrect, interval: newInterval, nextReview: nextDate.toISOString().slice(0, 10) };
-}
+import { localDateStr } from "./date";
 
 export function todayStr(): string {
-	return new Date().toISOString().slice(0, 10);
+	return localDateStr();
 }
 
+/** `YYYY-MM-DD` 形状校验，用于识别「不是日期」的排期值。 */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 是否到了复习时间。
+ *
+ * `nextReview` 缺失有两种来历，都按「新条目」处理、判定为立即到期：
+ * 1. **尚未排期**——手工创建的文件，或早期插件版本写入的文件；
+ * 2. **非法值**——旧版 SM-2 间隔无上限时溢出写出的 `NaN-NaN-NaN`。
+ *
+ * 若把这两种情况一律判为「不到期」，这些条目就永远不会出现在「今日待复习」里，
+ * 也就永远复习不到（判为到期后用户评一次分即会写回合法排期，文件就自愈了）。
+ *
+ * 插件自身写入的条目一定带合法 `nextReview`，因此不受影响。
+ */
 export function isDueForReview(note: WrongAnswerNote): boolean {
-	if (!note.nextReview) return false;
-	return note.nextReview <= todayStr();
+	const next = note.nextReview;
+	if (!next || !DATE_RE.test(next)) return true;
+	return next <= todayStr();
 }

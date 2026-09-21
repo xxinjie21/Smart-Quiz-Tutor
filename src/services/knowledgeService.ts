@@ -1,7 +1,7 @@
 import { Notice, TFile, TFolder, type App } from "obsidian";
-import type { PluginSettings, WrongAnswerNote } from "../types";
+import type { PluginSettings, WrongAnswerNote, FileMeta } from "../types";
 import { knowledgeTags } from "../utils/frontmatter";
-import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, joinPath } from "../utils/fs-utils";
+import { isAbs, readFileStr, writeFileStr, listMdFiles, listMdFilesRecursive, ensureFolder, joinPath, trashFileAbs } from "../utils/fs-utils";
 import { getLanguage } from "../i18n/index";
 import * as fs from "fs";
 import * as path from "path";
@@ -32,8 +32,18 @@ export function parseIndexSections(content: string): Record<IndexSource, string[
 	return sections;
 }
 
+/** 自动索引笔记正文中必然出现的三个分区标题。 */
+const KNOWLEDGE_INDEX_SECTIONS = ["## 相关题目", "## 相关笔记", "## 相关错题"];
+
+/**
+ * 判断是否为插件自动生成的「知识点索引」笔记。
+ *
+ * 除了 frontmatter 标记，还要求正文包含索引特有的三个分区标题 ——
+ * 否则用户手写笔记只要 frontmatter 恰好是 `tags: [知识点]`，就会在重建索引时被误删。
+ */
 export function isKnowledgeIndexContent(content: string): boolean {
-	return /^---\n\s*tags:\s*\[知识点\]\s*\n/.test(content);
+	if (!/^---\r?\n\s*tags:\s*\[知识点\]\s*\r?\n/.test(content)) return false;
+	return KNOWLEDGE_INDEX_SECTIONS.every(h => content.includes("\n" + h));
 }
 
 export function buildIndexBody(tag: string, sections: Record<IndexSource, string[]>): string {
@@ -114,10 +124,16 @@ export class KnowledgeService {
 		for (const n of wrongNotes) {
 			for (const t of knowledgeTags(n.tags)) addLink(t, "错题", n.baseName, n.filePath);
 		}
-		const extractTagsFromFile = async (file: TFile, folder: string, src: IndexSource) => {
+		const extractTagsFromFile = async (file: FileMeta, folder: string, src: IndexSource) => {
 			try {
 				let content = "";
-				if (isAbs(folder)) { content = readFileStr(file.path); } else { content = await this.p.app.vault.read(file); }
+				if (isAbs(folder)) {
+					content = readFileStr(file.path);
+				} else {
+					const tf = this.p.app.vault.getAbstractFileByPath(file.path);
+					if (!(tf instanceof TFile)) return;
+					content = await this.p.app.vault.read(tf);
+				}
 				const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
 				if (fmMatch) {
 					const tags = extractTagsFromFrontmatter(fmMatch[1]!);
@@ -125,14 +141,14 @@ export class KnowledgeService {
 				}
 			} catch { /* skip */ }
 		};
-		const listMdFiles = (folder: string): TFile[] => {
+		const listMdFiles = (folder: string): FileMeta[] => {
 			const excludes = [this.p.rootPath(this.p.settings.knowledgeFolder)].filter(Boolean);
 			if (isAbs(folder)) {
 				try {
 					if (!fs.existsSync(folder)) return [];
 					return listMdFilesRecursive(folder, excludes).map((fp: string) => {
 						const stat = fs.statSync(fp);
-						return { name: path.basename(fp), path: fp, basename: path.basename(fp).replace(/\.md$/, ""), stat: { mtime: stat.mtimeMs, size: stat.size } } as unknown as TFile;
+						return { name: path.basename(fp), path: fp, basename: path.basename(fp).replace(/\.md$/, ""), extension: "md", stat: { mtime: stat.mtimeMs, size: stat.size } };
 					});
 				} catch { return []; }
 			}
@@ -186,21 +202,16 @@ export class KnowledgeService {
 					}
 				} else {
 					const prefix = folder.endsWith("/") ? folder : folder + "/";
-					const allMd = (this.p.app.vault as { getMarkdownFiles?: () => { path: string }[] }).getMarkdownFiles;
-					const mdList = typeof allMd === "function" ? allMd.call(this.p.app.vault) : [];
-					for (const f of mdList) {
-						if (f.path.startsWith(prefix)) {
-							try { mdFiles.push({ path: f.path, basename: (f as unknown as { basename: string }).basename, content: await this.p.app.vault.cachedRead(f as TFile) }); } catch { /* skip */ }
-						}
+					for (const f of this.p.app.vault.getMarkdownFiles()) {
+						if (!f.path.startsWith(prefix)) continue;
+						try { mdFiles.push({ path: f.path, basename: f.basename, content: await this.p.app.vault.cachedRead(f) }); } catch { /* skip */ }
 					}
 				}
 			} catch { /* skip */ }
 		}
 
 		const knownBasenames = new Set<string>();
-		const vaultMd = (this.p.app.vault as { getMarkdownFiles?: () => { basename: string }[] }).getMarkdownFiles;
-		const vaultFiles = typeof vaultMd === "function" ? vaultMd.call(this.p.app.vault) : [];
-		for (const f of vaultFiles) knownBasenames.add(f.basename);
+		for (const f of this.p.app.vault.getMarkdownFiles()) knownBasenames.add(f.basename);
 
 		let brokenLinks = 0;
 		for (const f of mdFiles) {
@@ -226,6 +237,7 @@ export class KnowledgeService {
 		return { brokenLinks, duplicates };
 	}
 
+	/** 清理已不在 tagMap 中的旧索引文件；手写笔记（非索引格式）不会被触碰。 */
 	private async removeStaleTagFiles(folder: string, keepTags: string[]) {
 		const keep = new Set(keepTags);
 		if (isAbs(folder)) {
@@ -235,7 +247,7 @@ export class KnowledgeService {
 					if (keep.has(f.replace(/\.md$/, ""))) continue;
 					let content = "";
 					try { content = readFileStr(joinPath(folder, f)); } catch { /* skip */ }
-					if (isKnowledgeIndexContent(content)) fs.unlinkSync(joinPath(folder, f));
+					if (isKnowledgeIndexContent(content)) await trashFileAbs(joinPath(folder, f));
 				}
 			} catch { /* skip */ }
 			return;

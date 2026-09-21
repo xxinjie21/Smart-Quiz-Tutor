@@ -6,9 +6,10 @@ import {
 	parseFM,
 	buildFM,
 	parseQuestions,
-	parseReviewIntervals,
 	DEFAULT_SETTINGS,
-	DEFAULT_NOTE_INTERVALS,
+	clampEase,
+	EASE_MIN,
+	EASE_MAX,
 	parseExamBlocks,
 	buildExportHtml,
 } from "../src/main";
@@ -117,9 +118,16 @@ describe("parseQuestions keeps unanswered stems", () => {
 	});
 });
 
-describe("note review interval alignment", () => {
-	it("default settings note intervals match the standard preset", () => {
-		expect(parseReviewIntervals(DEFAULT_SETTINGS.noteReviewIntervals, DEFAULT_NOTE_INTERVALS)).toEqual(DEFAULT_NOTE_INTERVALS);
+describe("review ease-factor settings", () => {
+	it("ships sane default factors per module", () => {
+		expect(DEFAULT_SETTINGS.wrongEaseFactor).toBe(2.3);
+		expect(DEFAULT_SETTINGS.questionEaseFactor).toBe(2.5);
+		expect(DEFAULT_SETTINGS.noteEaseFactor).toBe(2.5);
+	});
+	it("clamps factors into the valid SM-2 range", () => {
+		expect(clampEase(1.0)).toBe(EASE_MIN);
+		expect(clampEase(9)).toBe(EASE_MAX);
+		expect(clampEase(NaN)).toBe(2.5);
 	});
 });
 

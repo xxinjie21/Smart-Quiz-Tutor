@@ -21,6 +21,10 @@ data.json
 
 # local workspace memory (agent tooling)
 .workbuddy/
+.workbuddy-ai/
+
+# 构建护栏失败时的临时备份（正常情况下构建结束即删除）
+main.js.guardbak
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store

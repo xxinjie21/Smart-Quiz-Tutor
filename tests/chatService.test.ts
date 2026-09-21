@@ -8,6 +8,10 @@ import {
 	scoreByContent,
 	rankCandidates,
 	buildReferenceBlock,
+	cutAtBoundary,
+	selectRelevantSnippets,
+	distributeBudget,
+	isCasualQuery,
 	type RetrievedChunk,
 	type ScopeFile,
 } from "../src/services/chatService";
@@ -157,13 +161,80 @@ describe("buildReferenceBlock", () => {
 		expect(out).toContain("回答请优先依据以上引用文件的内容与思想");
 	});
 
-	it("truncates later references once the budget is exhausted", () => {
+	it("distributes the budget fairly across references instead of dropping later ones", () => {
 		const out = buildReferenceBlock([
 			{ name: "A", text: "x".repeat(60), isSelection: false },
 			{ name: "B", text: "b".repeat(60), isSelection: false },
-		], 50);
+		], 150);
 		expect(out).toContain("【A】");
-		expect(out).not.toContain("【B】");
+		expect(out).toContain("【B】");
 		expect(out).not.toContain("x".repeat(60));
+		expect(out).not.toContain("b".repeat(60));
+		expect(out).toContain("部分引用因长度受限");
+	});
+
+	it("includes relevant snippets when a query is provided", () => {
+		const long = "开头内容。".repeat(500) + "关键命中词出现在这里" + "尾部内容。".repeat(500);
+		const out = buildReferenceBlock([{ name: "长文", text: long, isSelection: false }], 3000, { query: "关键命中词" });
+		expect(out).toContain("【长文】");
+		expect(out).toContain("相关片段");
+		expect(out).toContain("关键命中词");
+	});
+
+	it("is deterministic for the same input", () => {
+		const refs = [{ name: "A", text: "内容".repeat(500), isSelection: false }];
+		expect(buildReferenceBlock(refs, 1000, { query: "内容" })).toBe(buildReferenceBlock(refs, 1000, { query: "内容" }));
+	});
+});
+
+describe("cutAtBoundary", () => {
+	it("cuts at a paragraph boundary when possible", () => {
+		const text = "第一段。\n\n第二段很长很长很长很长很长很长很长很长很长";
+		const cut = cutAtBoundary(text, 7);
+		expect(cut).toBe("第一段。\n\n");
+	});
+	it("returns the original text when within limit", () => {
+		expect(cutAtBoundary("短", 10)).toBe("短");
+	});
+});
+
+describe("distributeBudget", () => {
+	it("gives each equal share when all are long", () => {
+		expect(distributeBudget([100, 100], 40)).toEqual([20, 20]);
+	});
+	it("redistributes leftover from short references", () => {
+		expect(distributeBudget([5, 100], 40)).toEqual([5, 35]);
+	});
+});
+
+describe("selectRelevantSnippets", () => {
+	it("returns snippets around query terms", () => {
+		const text = "aaaa".repeat(50) + "TARGET" + "bbbb".repeat(50);
+		const out = selectRelevantSnippets(text, ["target"], 40, 3);
+		expect(out.length).toBe(1);
+		expect(out[0]).toContain("TARGET");
+	});
+	it("returns empty when no term matches", () => {
+		expect(selectRelevantSnippets("hello", ["zzz"], 40, 3)).toEqual([]);
+	});
+});
+
+describe("isCasualQuery", () => {
+	it("treats greetings and short queries as casual", () => {
+		expect(isCasualQuery("你好")).toBe(true);
+		expect(isCasualQuery("您好，请问在吗？")).toBe(true);
+		expect(isCasualQuery("hi")).toBe(true);
+		expect(isCasualQuery("Hello, how are you?")).toBe(true);
+		expect(isCasualQuery("谢谢")).toBe(true);
+		expect(isCasualQuery("你是谁")).toBe(true);
+		expect(isCasualQuery("help")).toBe(true);
+		expect(isCasualQuery("yes")).toBe(true);
+	});
+
+	it("keeps knowledge questions as retrievable", () => {
+		expect(isCasualQuery("TCP 三次握手的过程是什么")).toBe(false);
+		expect(isCasualQuery("请总结这篇文章的重点")).toBe(false);
+		expect(isCasualQuery("SSE 流式输出怎么实现")).toBe(false);
+		expect(isCasualQuery("复习错题里的知识点")).toBe(false);
 	});
 });

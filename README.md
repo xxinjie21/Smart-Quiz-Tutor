@@ -43,7 +43,7 @@
 
 ### Wrong Answer Book (SM-2 spaced repetition)
 - Answer correctly → interval advances; answer wrong → resets to day 1.
-- Three interval presets per module — **Slow / Standard / Fast** — with Chinese hints for each phase of exam prep.
+- A single **difficulty factor (SM-2 EF)** per module controls interval growth, with **Fewer reviews / Standard / More reviews** one-click presets and a recommended range.
 - Wrong answers carry `[[knowledge tags]]` and sync into the knowledge folder for the graph.
 - Automatic review reminders when the plugin loads.
 
@@ -72,9 +72,10 @@
 
 ### 💬 AI Assistant Chat
 - A built-in chat panel embedded in the **Smart Question Tutor** sidebar (the **AI** tab).
-- Answers are grounded in your notes via retrieval; switch scope between **plugin knowledge base only** and **entire vault**.
+- **Workspace & multi-chat management**: organize chats into **workspaces**, each containing many independent **conversations** (switch / create / rename / delete via the header dropdowns and the ☰ drawer). Old single-history data migrates into a default workspace automatically.
+- Answers are grounded in your notes via retrieval; each conversation remembers its own scope between **plugin knowledge base only** and **entire vault**.
 - **Reference notes**: attach the current selection/note (or pick multiple notes) as context for the answer; references show as removable chips and are cleared automatically after sending.
-- The **reference budget** setting caps how much referenced text is fed to the model (default 60000; lower it for small local models).
+- The **reference budget** setting caps how much referenced text is fed to the model (default 60000; lower it for small local models). The budget is shared **fairly across references**: short files are included whole, long files keep their opening plus a few **query-relevant snippets**, and cuts land on natural boundaries.
 - Replies render as Markdown; each message can be copied or regenerated.
 
 ### 🔒 Privacy
@@ -136,7 +137,8 @@ Then enable the plugin in **Settings** → **Community plugins** → **Installed
 | Command | Action |
 |---------|--------|
 | 打开智学助手侧边栏 | Open the main sidebar |
-| 基于当前文档生成试题 | Open the generator for the active file |
+| 基于当前文档生成试题 | Open the file picker to generate questions |
+| 基于当前文档直接生成试题 | Generate questions directly from the active Markdown note |
 | 识别当前文件试卷 | Run full-exam recognition on the active file |
 | 查看错题本 | Open the wrong-answer list |
 | 查看题目生成历史记录 | Open generation history |
@@ -144,11 +146,7 @@ Then enable the plugin in **Settings** → **Community plugins** → **Installed
 
 ### Hotkeys
 
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+Q` | Open the generator for the current document |
-
-Customizable in **Settings** → **Hotkeys**.
+No default hotkey is bound. Bind one in **Settings** → **Hotkeys** (for example `Ctrl+Q` to **基于当前文档直接生成试题**).
 
 ---
 
@@ -171,27 +169,30 @@ Customizable in **Settings** → **Hotkeys**.
 | 知识点文件夹 | Knowledge-index folder | `知识点` |
 | 排除文件夹 | Folders excluded from scanning | `.trash, 模板, templates` |
 
-### Review Interval Presets
+### Review Interval Factor
 
-| Module | Slow | Standard | Fast |
-|--------|------|----------|------|
-| 错题 | `2,5,10,20,40,60` | `1,2,4,7,15,30` | `1,1,3,5,10,20` |
-| 题目 | `10,20,40,80,120` | `7,15,30,60,90` | `4,8,18,40,60` |
-| 笔记 | `3,8,20,45,80` | `2,6,14,35,70` | `1,1,2,3,5` |
+Intervals are controlled by a single **difficulty factor (SM-2 EF)** per module. SM-2 grows the interval as **1 day → 6 days → previous × factor**; the factor is then nudged by each review's grade. Recommended **2.0–2.8** (standard 2.5); input is clamped to **1.3–3.0**.
+
+| Module | Default factor | Presets (Fewer reviews / Standard / More reviews) |
+|--------|----------------|----------------------------------|
+| 错题 | `2.3` | `2.7 / 2.5 / 2.3` |
+| 题目 | `2.5` | `2.7 / 2.5 / 2.3` |
+| 笔记 | `2.5` | `2.7 / 2.5 / 2.3` |
 
 ---
 
 ## Interface
 
-The sidebar has **6 tabs**:
+The sidebar has **7 tabs**:
 
 | Tab | Content |
 |-----|---------|
 | 🏠 首页 | Stats overview (4 cards) + learning heatmap + review reminders + quick actions |
 | 📝 题目 | Generation settings, question files, file picker |
 | 📋 笔记 | Create study notes from files, note management |
-| ❌ 错题 | Wrong-answer list, detail, review, export, regeneration |
-| 📊 复习 | Unified due-review dashboard with filter / sort / one-click completion |
+| ❌ 错题 | Wrong-answer list, detail, manual add, review, export, regeneration |
+| 📊 复习 | Unified due-review dashboard with filter / sort / SM-2 grading |
+| 💬 AI | Built-in retrieval-grounded assistant chat |
 | ⚙️ 设置 | All configuration |
 
 ---
@@ -209,6 +210,16 @@ The sidebar has **6 tabs**:
 ---
 
 ## Changelog
+
+### v2.3.0
+- **Real SM-2 spaced repetition**: per-item ease factor (EF) and repetition tracking; review with four grades (**Forgot / Hard / Good / Easy**). Each module has a single **interval factor** setting (default wrong 2.3 / question 2.5 / note 2.5, recommended 2.0–2.8) with Fewer reviews / Standard / More reviews one-click presets; intervals grow as 1 day → 6 days → previous × factor.
+- **Manual wrong-answer entry**: add a wrong answer by hand (content / source / knowledge tags / note) from the **错题** tab.
+- **Answer-only export**: export a questions file (or a wrong answer) containing only the answers and explanations.
+- **Chat workspaces**: the AI chat now supports **workspaces** and multiple independent **conversations** per workspace; each conversation remembers its own retrieval scope (old single history migrates automatically).
+- **Local-date fix**: review scheduling now uses your local timezone instead of UTC (no more off-by-one due dates).
+- **Settings single source of truth**: the native settings tab and the in-sidebar settings are both rendered from one schema, so they can no longer drift apart.
+- **Cleanup**: removed two unused dependencies; the hardcoded global `Ctrl+Q` listener is replaced by a normal command (bind your own hotkey).
+- 307 tests pass; `tsc` 0 errors; ESLint 0 errors / 0 warnings.
 
 ### v2.2.0
 - **Built-in AI chat** in the Smart Question Tutor sidebar (**AI** tab): retrieval over your notes, **multi-file references** (from the active note/selection or a file picker), a configurable **reference budget**, Markdown-rendered replies, copy / regenerate, and "stick-to-bottom" scrolling.
@@ -284,7 +295,7 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 
 ### 📘 错题本（SM-2 间隔重复）
 - 答对 → 间隔递增；答错 → 重置为第 1 天。
-- 每个模块提供 **慢速 / 标准 / 快速** 三套间隔预设，并附各备考阶段的中文说明。
+- 每个模块用一个**难度因子（SM-2 的 EF）**控制间隔增长，附带 **少复习 / 标准 / 多复习** 一键预设与推荐范围。
 - 错题携带 `[[知识点标签]]`，自动同步到知识点文件夹，图谱可见。
 - 插件启动时自动提醒到期复习。
 
@@ -313,9 +324,10 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 
 ### 💬 AI 助手对话
 - 内嵌在**智学助手**侧边栏的 **AI** 页签里。
-- 回答基于你的笔记检索结果；检索范围可在 **仅插件知识库** 与 **整个 vault** 间切换。
+- **工作区 + 多会话管理**：用**工作区**分区，每个工作区内可建多个独立**会话**；通过头部下拉与 ☰ 抽屉新建 / 切换 / 重命名 / 删除。旧版单一聊天历史会自动迁移为一个「默认」工作区里的会话。
+- 回答基于你的笔记检索结果；检索范围可在 **仅插件知识库** 与 **整个 vault** 间切换，且**每个会话独立记忆**各自的检索范围。
 - **引用笔记**：把当前选区/笔记（或从文件选择器挑多篇）挂为回答上下文；以可移除的 chip 展示，发送后自动清空。
-- 设置项「引用总预算(字)」限制带入模型的引用文本量（默认 60000，本地小模型建议调小）。
+- 设置项「引用总预算(字)」限制带入模型的引用文本量（默认 60000，本地小模型建议调小）。预算在各引用间**公平分配**：短文件整篇带上，长文件保留开头并补充与提问**相关的片段**，截断落在自然边界。
 - 回复按 Markdown 渲染；每条消息可复制、可重新生成。
 
 ### 🔒 隐私说明
@@ -377,7 +389,8 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 | 命令 | 说明 |
 |------|------|
 | 打开智学助手侧边栏 | 打开主界面侧边栏 |
-| 基于当前文档生成试题 | 基于当前活动文件打开出题器 |
+| 基于当前文档生成试题 | 打开文件选择器出题 |
+| 基于当前文档直接生成试题 | 基于当前活动 Markdown 笔记直接生成试题 |
 | 识别当前文件试卷 | 对当前文件执行整卷识别 |
 | 查看错题本 | 打开错题列表 |
 | 查看题目生成历史记录 | 打开生成历史 |
@@ -385,11 +398,7 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 
 ### 快捷键
 
-| 快捷键 | 功能 |
-|--------|------|
-| `Ctrl+Q` | 为当前文档打开出题器 |
-
-可在 **设置 → 快捷键** 中自定义。
+不预设任何快捷键。请在 **设置** → **快捷键** 中自行绑定（例如把 `Ctrl+Q` 绑定到 **基于当前文档直接生成试题**）。
 
 ---
 
@@ -412,27 +421,30 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 | 知识点文件夹 | 知识点索引保存路径 | `知识点` |
 | 排除文件夹 | 不参与扫描的文件夹 | `.trash, 模板, templates` |
 
-### 复习间隔预设
+### 复习间隔因子
 
-| 模块 | 慢速 | 标准 | 快速 |
-|------|------|------|------|
-| 错题 | `2,5,10,20,40,60` | `1,2,4,7,15,30` | `1,1,3,5,10,20` |
-| 题目 | `10,20,40,80,120` | `7,15,30,60,90` | `4,8,18,40,60` |
-| 笔记 | `3,8,20,45,80` | `2,6,14,35,70` | `1,1,2,3,5` |
+间隔由每个模块的**难度因子（SM-2 的 EF）**控制：SM-2 按 **1 天 → 6 天 → 上一间隔 × 因子**递增长，因子再随每次评分微调。推荐 **2.0–2.8**（标准 2.5）；输入限制在 **1.3–3.0**。
+
+| 模块 | 默认因子 | 预设（少复习 / 标准 / 多复习） |
+|------|---------|--------------------------|
+| 错题 | `2.3` | `2.7 / 2.5 / 2.3` |
+| 题目 | `2.5` | `2.7 / 2.5 / 2.3` |
+| 笔记 | `2.5` | `2.7 / 2.5 / 2.3` |
 
 ---
 
 ## 界面
 
-侧边栏共有 **6 个 Tab**：
+侧边栏共有 **7 个 Tab**：
 
 | Tab | 功能 |
 |-----|------|
 | 🏠 首页 | 统计概览（4 卡片）+ 学习热力图 + 复习提醒 + 快捷操作 |
 | 📝 题目 | 出题设置、题目文件管理、文件选择器 |
 | 📋 笔记 | 从文件创建学习笔记、笔记管理 |
-| ❌ 错题 | 错题列表、详情、复习、导出、重生成 |
-| 📊 复习 | 统一改版到期复习看板，支持筛选 / 排序 / 一键完成 |
+| ❌ 错题 | 错题列表、详情、手动添加、复习、导出、重生成 |
+| 📊 复习 | 统一到期复习看板，支持筛选 / 排序 / SM-2 评分 |
+| 💬 AI | 内置基于笔记检索的对话助手 |
 | ⚙️ 设置 | 所有配置项 |
 
 ---
@@ -450,6 +462,16 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 ---
 
 ## 更新日志
+
+### v2.3.0
+- **真 SM-2 间隔重复**：每条记录独立维护难度因子（EF）与重复次数；复习采用四档评分（**忘记 / 困难 / 一般 / 简单**）。每个模块只填一个**间隔因子**（默认 错题 2.3 / 题目 2.5 / 笔记 2.5，推荐 2.0–2.8），并提供 少复习 / 标准 / 多复习 一键预设；间隔按 1 天 → 6 天 → 上一间隔 × 因子 递增。
+- **手动添加错题**：在 **错题** 页手动录入（内容 / 来源 / 知识点标签 / 备注）。
+- **仅答案导出**：可导出只含答案与解析的试题文件（错题详情同样支持）。
+- **聊天工作区**：AI 对话支持**工作区**，每个工作区内可有多个独立**会话**；每个会话单独记忆检索范围（旧版单一历史自动迁移）。
+- **本地日期修复**：复习排期改用本地时区，不再出现 UTC 导致的差一天。
+- **设置单一来源**：原生设置页与侧边栏设置页由同一 schema 渲染，不再各自分叉。
+- **清理**：移除两个未使用依赖；移除硬编码的全局 `Ctrl+Q` 监听，改为普通命令（快捷键自行绑定）。
+- 307 项测试通过；`tsc` 0 错误；ESLint 0 错误 / 0 警告。
 
 ### v2.2.0
 - **内置 AI 对话**：藏在**智学助手**侧边栏的 **AI** 页签——基于笔记检索回答，支持**多文件引用**（当前笔记/选区或从文件选择器挑选）、可配置**引用预算**、Markdown 渲染、复制/重新生成、贴底滚动。

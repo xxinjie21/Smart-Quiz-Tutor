@@ -367,8 +367,23 @@ class DOMMatrixPolyfill {
 
 const PDF_GLOBALS = ["pdfjsWorker", "pdfjsLib", "_pdfjsTestingUtils", "DOMMatrix", "ImageData", "Path2D", "navigator"] as const;
 
+/**
+ * polyfill 是挂在**进程全局对象**上的，两个 PDF 转换重叠时，
+ * 内层的 finally 会把外层仍在使用的全局提前删掉。这里用一条串行链保证互斥。
+ */
+let pdfEnvChain: Promise<unknown> = Promise.resolve();
+
 async function withPdfEnvironment<T>(fn: () => Promise<T>): Promise<T> {
-	const g = globalThis as Record<string, unknown>;
+	const run = pdfEnvChain.then(() => withPdfEnvironmentExclusive(fn));
+	// 让链在失败后仍能继续，但把错误抛给本次调用方
+	pdfEnvChain = run.then(() => undefined, () => undefined);
+	return run;
+}
+
+async function withPdfEnvironmentExclusive<T>(fn: () => Promise<T>): Promise<T> {
+	// 用 window（而非 globalThis）注入 polyfill：pdfjs 只会在主窗口的全局对象上查找它们，
+	// 且这样不依赖 popout 窗口的全局对象，符合 Obsidian 的窗口隔离约定。
+	const g = window as unknown as Record<string, unknown>;
 	const saved = new Map<string, unknown>();
 	for (const key of PDF_GLOBALS) {
 		if (key in g) saved.set(key, g[key]);

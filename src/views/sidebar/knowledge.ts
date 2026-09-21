@@ -2,8 +2,9 @@ import { App, Modal, Notice, TFile, TFolder } from "obsidian";
 import * as fs from "fs";
 
 import type { MainSidebarView } from "../sidebarView";
-import { isAbs, readFileStr, listMdFiles, joinPath, deleteFileAbs } from "../../utils/fs-utils";
+import { isAbs, readFileStr, listMdFiles, joinPath, trashFileAbs } from "../../utils/fs-utils";
 import { t, tf } from "../../i18n/index";
+import { backButton } from "./shared/ui";
 
 export function knowledgeFolders(view: MainSidebarView): { path: string; label: string }[] {
 	return [
@@ -96,7 +97,7 @@ export function knowledgeManagerTagFiles(view: MainSidebarView, tag: string): { 
 
 export async function deleteKnowledgeIndexFile(view: MainSidebarView, filePath: string): Promise<void> {
 	if (isAbs(filePath)) {
-		deleteFileAbs(filePath);
+		await trashFileAbs(filePath);
 	} else {
 		const f = view.app.vault.getAbstractFileByPath(filePath);
 		if (f instanceof TFile) await view.app.fileManager.trashFile(f);
@@ -122,8 +123,7 @@ export async function renderKnowledgeManager(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-	backBtn.addEventListener("click", () => { view.homeView = "default"; void view.renderHomeTab(); });
+	backButton(el, () => { view.homeView = "default"; void view.renderHomeTab(); });
 
 	el.createDiv({ text: t("知识点管理"), attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
 	el.createDiv({ text: t("可多选/全选，删除会同时删除知识点索引文件"), attr: { style: "color:var(--text-muted);font-size:15px;margin-bottom:14px;" } });
@@ -140,7 +140,7 @@ export async function renderKnowledgeManager(view: MainSidebarView) {
 	const selectAllCb = bulkBar.createEl("input", { attr: { type: "checkbox", title: t("全选") } });
 	bulkBar.createSpan({ text: t("全选"), attr: { style: "color:var(--text-muted);font-size:16px;cursor:pointer;user-select:none;" } }).addEventListener("click", () => { selectAllCb.checked = !selectAllCb.checked; selectAllCb.checked ? selectAll() : clearSel(); });
 	const bulkCount = bulkBar.createDiv({ text: tf("已选 {n} 个", { n: 0 }), attr: { style: "flex:1;color:var(--text-muted);font-size:16px;" } });
-	const bulkDelBtn = bulkBar.createEl("button", { text: t("删除选中"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;font-size:16px;border:1px solid var(--color-red);color:var(--color-red);background:transparent;opacity:0.5;pointer-events:none;" } });
+	const bulkDelBtn = bulkBar.createEl("button", { text: t("删除选中"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;font-size:16px;border:1px solid var(--qg-danger);color:var(--qg-danger);background:transparent;opacity:0.5;pointer-events:none;" } });
 
 	const summaryEl = el.createDiv({ text: tf("共 {n} 个知识点", { n: list.length }), attr: { style: "color:var(--text-muted);font-size:16px;margin-bottom:8px;" } });
 
@@ -312,7 +312,7 @@ class KnowledgeDeleteConfirmModal extends Modal {
 		const btnRow = contentEl.createDiv({ attr: { style: "display:flex;justify-content:flex-end;gap:8px;" } });
 		const cancelBtn = btnRow.createEl("button", { text: t("取消"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:15px;" } });
 		cancelBtn.addEventListener("click", () => this.close());
-		const okBtn = btnRow.createEl("button", { text: t("删除"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--color-red);background:var(--color-red);color:var(--text-on-accent);font-size:15px;" } });
+		const okBtn = btnRow.createEl("button", { text: t("删除"), attr: { style: "padding:6px 16px;border-radius:6px;cursor:pointer;border:1px solid var(--qg-danger);background:var(--qg-danger);color:var(--text-on-accent);font-size:15px;" } });
 		okBtn.addEventListener("click", () => { this.confirmed = true; this.close(); });
 	}
 

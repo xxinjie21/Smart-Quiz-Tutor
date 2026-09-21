@@ -22,49 +22,67 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	weakPointThreshold: 2,
 	autoReviewReminder: true,
 	extractedExamFolder: "题目/识别试卷",
-	wrongReviewIntervals: "1,2,4,7,15,30",
-	questionReviewIntervals: "7,15,30,60,90",
-	noteReviewIntervals: "2,6,14,35,70",
+	wrongEaseFactor: 2.3,
+	questionEaseFactor: 2.5,
+	noteEaseFactor: 2.5,
 	noteViewFolder: "笔记",
 	knowledgeFolder: "知识点",
 	language: "zh",
-	chatHistory: [],
 	chatSearchScope: "plugin",
+	chatAutoRetrieve: true,
 	chatRefBudget: 60000,
+	chatActiveSessionId: "",
+	chatSessionsPanelOpen: false,
 	sidebarZoom: 1,
 };
 
 export const SYSTEM_TAGS = ["错题", "题目", "笔记"];
 
-export interface IntervalPreset {
+export interface EasePreset {
 	label: string;
-	values: string;
+	/** 初始难度因子（SM-2 的 EF）。 */
+	factor: number;
 	hint: string;
 }
 
-export const INTERVAL_PRESETS: Record<string, IntervalPreset[]> = {
-	wrong: [
-		{ label: "慢速", values: "2,5,10,20,40,60", hint: "复盘间隔长、执行省心，适合已初步掌握、仅需定期回顾的错题" },
-		{ label: "标准", values: "1,2,4,7,15,30", hint: "考前日常训练主力方案，遗忘曲线与复习节奏平衡" },
-		{ label: "快速", values: "1,1,3,5,10,20", hint: "前期隔天密集复盘，适合频繁出错的高频薄弱点" },
-	],
-	question: [
-		{ label: "慢速", values: "10,20,40,80,120", hint: "适合基础扎实、掌握牢固、几乎不会遗忘的简单题目" },
-		{ label: "标准", values: "7,15,30,60,90", hint: "覆盖范围广、周期适中，配合考研各阶段节奏" },
-		{ label: "快速", values: "4,8,18,40,60", hint: "加密前期间隔、反复强化，适合刚学完的重难点" },
-	],
-	note: [
-		{ label: "慢速", values: "3,8,20,45,80", hint: "长线缓释记忆，适合考研基础阶段按部就班的日常背诵" },
-		{ label: "标准", values: "2,6,14,35,70", hint: "中等密度、长线巩固，强化期系统性复习主力配置" },
-		{ label: "快速", values: "1,1,2,3,5", hint: "考前冲刺专用，短期高频轰炸、以速度换覆盖" },
-	],
-};
+/** 难度因子下限/上限（SM-2 下限 1.3，上限防止间隔爆炸式增长）。 */
+export const EASE_MIN = 1.3;
+export const EASE_MAX = 3.0;
+export const EASE_RECOMMENDED = "2.0–2.8";
+
+/**
+ * 单次复习间隔的天数上限（约 10 年）。
+ *
+ * 纯 SM-2 的 `I(n) = I(n-1) × EF` 没有上界，而错题卡片允许在未到期时反复评分，
+ * 所以连续点几十次「简单」会让间隔溢出成 `Invalid Date`，把 `nextReview` 写成
+ * `NaN-NaN-NaN`（该条目从此永远不会到期）。这里加一个硬上限兜住。
+ */
+export const MAX_INTERVAL_DAYS = 3650;
+
+/**
+ * 一键填入的难度因子预设。
+ *
+ * 文案以「复习频率」命名，而不是「快/慢」——因子越大间隔增长越快、复习次数越少，
+ * 旧标签（慢速=2.7、快速=2.3）与提示语恰好相反，容易让用户选反。
+ */
+export const EASE_PRESETS: EasePreset[] = [
+	{ label: "少复习", factor: 2.7, hint: "因子 2.7：间隔增长快、复习次数少，适合已牢固掌握、很少遗忘的内容" },
+	{ label: "标准", factor: 2.5, hint: "SM-2 标准难度因子，间隔增长与记忆曲线平衡" },
+	{ label: "多复习", factor: 2.3, hint: "因子 2.3：间隔增长慢、复习更频繁，适合高频薄弱点" },
+];
 
 export const SIDEBAR_VIEW_TYPE = "question-generator-sidebar";
 
 export const CHAT_HISTORY_LIMIT = 50;
 export const CHAT_RETRIEVE_LIMIT = 5;
 export const CHAT_CANDIDATE_LIMIT = 60;
+export const CHAT_TITLE_MAX = 20;
+/** 引用拼装：头部保留字数、单片段字数、最多片段数。 */
+export const REF_HEAD_CHARS = 1500;
+export const REF_SNIPPET_CHARS = 700;
+export const REF_SNIPPET_MAX = 3;
+/** 单文件引用捕获硬上限（防止内存过大）。 */
+export const REF_CAPTURE_MAX = 200000;
 
 export const HISTORY_LIMIT = 100;
 export const HISTORY_RESULT_CHARS = 2000;

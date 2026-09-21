@@ -363,18 +363,31 @@ export function validateGenerated(text: string): GeneratedValidation {
 	return { ok: sectionCount > 0 && questionCount >= 1 && hasAnswer, sectionCount, questionCount, hasAnswer };
 }
 
+/**
+ * AI 输出末尾的「知识点」标签行。
+ * 允许列表符号 / 引用前缀 / Markdown 加粗（`**知识点：** 力学`），这些 AI 都经常写。
+ */
+const AI_TAG_LINE_RE = /^[>\-*\s]*(?:\*\*)?(?:知识点|Knowledge)(?:\*\*)?[：:]\s*(.*)$/i;
+/**
+ * 从末尾往前搜索标签行的窗口。
+ * 旧实现只看最后 5 行——只要 AI 在标签行之后又补了「答案汇总/解析」或几行空行，
+ * 标签就会漏解析，且 `知识点：…` 原样留在题目正文里。
+ */
+const AI_TAG_SCAN_LINES = 12;
+
+/** 从 AI 生成结果中取出「知识点」标签，并返回去掉该行的正文。 */
 export function parseAITagsFromResult(text: string): { tags: string[]; cleanText: string } {
 	const lines = text.split("\n");
-	const lastLines = lines.slice(-5);
-	for (let i = lastLines.length - 1; i >= 0; i--) {
-		const line = lastLines[i]!.trim();
-		const match = line.match(/^(?:知识点|Knowledge)[：:]\s*(.+)/i);
-		if (match) {
-			const tags = match[1]!.split(/[,，]/).map(s => s.trim()).filter(Boolean);
-			const cleanLines = lines.slice(0, lines.length - lastLines.length + i);
-			return { tags, cleanText: cleanLines.join("\n").trim() };
-		}
+	const start = Math.max(0, lines.length - AI_TAG_SCAN_LINES);
+	for (let i = lines.length - 1; i >= start; i--) {
+		const match = lines[i]!.trim().match(AI_TAG_LINE_RE);
+		if (!match) continue;
+		const raw = match[1]!.replace(/^\*\*\s*/, "").replace(/\s*\*\*$/, "").trim();
+		if (!raw) continue;
+		const tags = raw.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+		if (tags.length === 0) continue;
+		return { tags, cleanText: lines.slice(0, i).join("\n").trim() };
 	}
-		return { tags: [], cleanText: text };
+	return { tags: [], cleanText: text };
 }
 

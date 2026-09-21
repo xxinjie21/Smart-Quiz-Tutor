@@ -1,5 +1,6 @@
 import type { MainSidebarView } from "../sidebarView";
 import { t, tf } from "../../i18n/index";
+import { backButton } from "./shared/ui";
 
 /** 生成历史记录页（从 MainSidebarView 抽出）。 */
 export function renderHistoryView(view: MainSidebarView): void {
@@ -7,8 +8,7 @@ export function renderHistoryView(view: MainSidebarView): void {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: t("← 返回"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-	backBtn.addEventListener("click", () => { view.homeView = "default"; void view.renderHomeTab(); });
+	backButton(el, () => { view.homeView = "default"; void view.renderHomeTab(); });
 
 	const headerRow = el.createDiv({ attr: { style: "display:flex;align-items:center;gap:8px;margin-bottom:10px;" } });
 	headerRow.createDiv({ text: t("生成历史记录"), attr: { style: "font-size:20px;font-weight:bold;flex:1;" } });
@@ -19,7 +19,7 @@ export function renderHistoryView(view: MainSidebarView): void {
 		return;
 	}
 
-	const clearBtn = headerRow.createEl("button", { text: t("清空历史"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);" } });
+	const clearBtn = headerRow.createEl("button", { text: t("清空历史"), attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;font-size:17px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);" } });
 	clearBtn.addEventListener("click", () => { view.plugin.history = []; void view.plugin.saveHistory(); void view.renderHistoryView(); });
 
 	const listEl = el.createDiv({ attr: { style: "display:flex;flex-direction:column;gap:8px;" } });

@@ -6,7 +6,8 @@ import {
 	cleanSourceText,
 	estimateTokens,
 	stripAnswersForExport,
-	reviewUpdate,
+	extractAnswersForExport,
+	sm2Update,
 	todayStr,
 	isDueForReview,
 	stripMd,
@@ -90,17 +91,39 @@ describe("stripAnswersForExport", () => {
 	});
 });
 
-describe("reviewUpdate", () => {
+describe("extractAnswersForExport", () => {
+	it("keeps only answer/explanation lines with question numbers", () => {
+		const text = [
+			"1. What is TCP?",
+			"A. protocol",
+			"答案：A",
+			"解析：传输控制协议",
+			"2. True or false",
+			"答案：正确",
+		].join("\n");
+		const out = extractAnswersForExport(text);
+		expect(out).toContain("1. 答案：A");
+		expect(out).toContain("1. 解析：传输控制协议");
+		expect(out).toContain("2. 答案：正确");
+		expect(out).not.toContain("What is TCP?");
+	});
+	it("returns empty string when there are no answers", () => {
+		expect(extractAnswersForExport("1. Question\nA. option")).toBe("");
+	});
+});
+
+describe("sm2Update", () => {
 	it("increases interval on correct answer", () => {
-		const result = reviewUpdate(0, true);
-		expect(result.correctCount).toBe(1);
-		expect(result.interval).toBeGreaterThan(0);
+		const result = sm2Update({ easeFactor: 2.5, repetitions: 0, interval: 1, lapses: 0 }, 4);
+		expect(result.repetitions).toBe(1);
+		expect(result.interval).toBe(1);
 	});
 
 	it("resets to 0 on wrong answer", () => {
-		const result = reviewUpdate(3, false);
-		expect(result.correctCount).toBe(0);
+		const result = sm2Update({ easeFactor: 2.5, repetitions: 3, interval: 30, lapses: 0 }, 1);
+		expect(result.repetitions).toBe(0);
 		expect(result.interval).toBe(1);
+		expect(result.lapses).toBe(1);
 	});
 });
 

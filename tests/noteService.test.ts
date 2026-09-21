@@ -65,14 +65,16 @@ describe("buildNoteFrontmatter", () => {
 	it("includes review metadata for the spaced-repetition system", () => {
 		const fm = buildNoteFrontmatter("src", "path", []);
 		expect(fm).toContain("nextReview: \"");
-		expect(fm).toContain("interval: 2");
+		expect(fm).toContain("interval: 1");
 		expect(fm).toContain("correctCount: 0");
 		expect(fm).toContain("wrongCount: 0");
+		expect(fm).toContain("easeFactor: 2.5");
 	});
 
-	it("uses provided note intervals for first review", () => {
-		const fm = buildNoteFrontmatter("src", "path", [], {}, [5, 10]);
-		expect(fm).toContain("interval: 5");
+	it("seeds the initial ease factor from the module setting", () => {
+		const fm = buildNoteFrontmatter("src", "path", [], {}, 2.7);
+		expect(fm).toContain("easeFactor: 2.7");
+		expect(fm).toContain("interval: 1");
 	});
 
 	it("allows extra fields to override review metadata", () => {

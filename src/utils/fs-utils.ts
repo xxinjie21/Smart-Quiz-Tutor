@@ -2,12 +2,18 @@ import { App } from "obsidian";
 import * as fs from "fs";
 import * as path from "path";
 
+import { localDateStr } from "./date";
+import { getElectronShell } from "./electron";
+
+/** vault 之外的文件被删除时移入的同级子目录名（回收站不可用时的兜底）。 */
+export const TRASH_DIR_NAME = ".qg-trash";
+
 export function isAbs(p: string): boolean {
 	return /^[A-Za-z]:[/\\]/.test(p) || p.startsWith("/");
 }
 
 export function daysUntil(dateStr: string): number {
-	const today = new Date().toISOString().slice(0, 10);
+	const today = localDateStr();
 	const diff = new Date(dateStr).getTime() - new Date(today).getTime();
 	return Math.max(0, Math.ceil(diff / 86400000));
 }
@@ -43,6 +49,11 @@ export function listMdFiles(dir: string): string[] {
 	return fs.readdirSync(dir).filter((f: string) => f.endsWith(".md"));
 }
 
+/** 递归遍历时跳过的目录名（兜底回收站目录）。 */
+function shouldSkipDir(name: string): boolean {
+	return name === TRASH_DIR_NAME;
+}
+
 export function listFilesRecursive(dir: string, exts: readonly string[], excludePrefixes: string[] = []): string[] {
 	if (!fs.existsSync(dir)) return [];
 	const ex = excludePrefixes.filter(Boolean).map(p => path.normalize(p));
@@ -51,6 +62,7 @@ export function listFilesRecursive(dir: string, exts: readonly string[], exclude
 		for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
 			const fp = path.join(d, entry.name);
 			if (entry.isDirectory()) {
+				if (shouldSkipDir(entry.name)) continue;
 				if (ex.some(p => fp === p || fp.startsWith(p + path.sep))) continue;
 				walk(fp);
 			} else {
@@ -71,6 +83,7 @@ export function listMdFilesRecursive(dir: string, excludePrefixes: string[] = []
 		for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
 			const fp = path.join(d, entry.name);
 			if (entry.isDirectory()) {
+				if (shouldSkipDir(entry.name)) continue;
 				if (ex.some(p => fp === p || fp.startsWith(p + path.sep))) continue;
 				walk(fp);
 			}
@@ -81,10 +94,41 @@ export function listMdFilesRecursive(dir: string, excludePrefixes: string[] = []
 	return out;
 }
 
-export function deleteFileAbs(filePath: string) {
-	if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+/**
+ * 删除 vault 之外的绝对路径文件。
+ *
+ * 优先移入**系统回收站**；回收站不可用（Electron 版本不支持等）时退回同目录下的
+ * `.qg-trash/` 子目录——仍然可以人工找回，**绝不静默永久删除**。
+ *
+ * @returns 是否已成功移走（文件本就不存在也视为成功）
+ */
+export async function trashFileAbs(filePath: string): Promise<boolean> {
+	if (!fs.existsSync(filePath)) return true;
+
+	const shell = getElectronShell();
+	if (shell?.trashItem) {
+		try {
+			await shell.trashItem(filePath);
+			return true;
+		} catch { /* 回收站不可用，走本地兜底 */ }
+	}
+
+	try {
+		const dir = path.dirname(filePath);
+		const trashDir = path.join(dir, TRASH_DIR_NAME);
+		if (!fs.existsSync(trashDir)) fs.mkdirSync(trashDir, { recursive: true });
+		const target = path.join(trashDir, path.basename(filePath) + "." + Date.now().toString(36));
+		fs.renameSync(filePath, target);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
+/**
+ * 把文件移入回收站（系统回收站优先，不可用时退回同目录 `.qg-trash` 兜底）。
+ * 这是本插件唯一的删除入口——所有删除都必须是可恢复的。
+ */
 async function vaultPathExists(app: App, p: string): Promise<boolean> {
 	try { return await app.vault.adapter.exists(p); } catch { return false; }
 }
@@ -122,9 +166,11 @@ export function parseExcludeFolderNames(cfgStr: string): string[] {
 }
 
 export function isExcludedPath(p: string, excludeConfig: string): boolean {
+	const segments = p.replace(/\\/g, "/").split("/");
+	// 兜底回收站目录永远不参与扫描，避免「已删除」的文件重新出现在列表里
+	if (segments.includes(TRASH_DIR_NAME)) return true;
 	const names = parseExcludeFolderNames(excludeConfig);
 	if (names.length === 0) return false;
-	const segments = p.replace(/\\/g, "/").split("/");
 	return names.some(n => segments.includes(n));
 }
 

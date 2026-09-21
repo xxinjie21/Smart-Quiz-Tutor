@@ -6,10 +6,12 @@ import { MAX_EXAM_CHUNK_CHARS, EXAM_CHUNK_OVERLAP, SEARCH_DEBOUNCE_MS } from "..
 import { debounce } from "../../utils/debounce";
 import { buildFM, knowledgeTags } from "../../utils/frontmatter";
 import { parseQuestions } from "../../utils/parse";
-import { parseReviewIntervals, DEFAULT_QUESTION_INTERVALS } from "../../utils/review";
 import { normalizeExamContent, fixSequentialNumbers } from "../../utils/layout";
 import { buildExamExtractPrompt, parseAITagsFromResult, mergeExamChunks } from "../../services/questionService";
 import { t, tf } from "../../i18n/index";
+import { localDateStr, addDaysStr } from "../../utils/date";
+import { clampEase } from "../../utils/sm2";
+import { backButton, emptyState } from "./shared/ui";
 
 export async function renderExamBrowser(view: MainSidebarView) {
 	if (!view.innerContentEl) return;
@@ -17,8 +19,7 @@ export async function renderExamBrowser(view: MainSidebarView) {
 	const el = view.innerContentEl;
 	el.empty();
 
-	const backBtn = el.createEl("button", { text: "← 返回", attr: { style: "padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid var(--background-modifier-border);background:var(--background-secondary);color:var(--text-normal);font-size:19px;margin-bottom:12px;" } });
-	backBtn.addEventListener("click", () => { view.cancelAI(); view.examSelected.clear(); view.examStatusText = ""; view.homeView = "default"; void view.renderHomeTab(); });
+	backButton(el, () => { view.cancelAI(); view.examSelected.clear(); view.examStatusText = ""; view.homeView = "default"; void view.renderHomeTab(); });
 
 	el.createDiv({ text: "AI 识别试卷", attr: { style: "font-size:21px;font-weight:bold;margin-bottom:4px;" } });
 	el.createDiv({ text: "选择vault中的文档，AI自动识别并提取其中的题目，保存后进入答题模式", attr: { style: "color:var(--text-muted);font-size:17px;margin-bottom:12px;" } });
@@ -27,7 +28,7 @@ export async function renderExamBrowser(view: MainSidebarView) {
 		const statusEl = el.createDiv({ attr: { style: "text-align:center;padding:24px 0;" } });
 		statusEl.createDiv({ text: "⏳", attr: { style: "font-size:28px;margin-bottom:8px;" } });
 		statusEl.createDiv({ text: view.examStatusText || t("AI 正在识别题目..."), attr: { style: "color:var(--text-muted);font-size:19px;" } });
-		const stopBtn = statusEl.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--color-red);background:var(--background-secondary);color:var(--color-red);margin-top:12px;" } });
+		const stopBtn = statusEl.createEl("button", { text: t("⏹ 停止"), attr: { style: "padding:6px 16px;border-radius:4px;cursor:pointer;font-size:18px;border:1px solid var(--qg-danger);background:var(--background-secondary);color:var(--qg-danger);margin-top:12px;" } });
 		stopBtn.addEventListener("click", () => view.cancelAI());
 		return;
 	}
@@ -48,7 +49,7 @@ export async function renderExamBrowser(view: MainSidebarView) {
 		const activeFile = view.app.workspace.getActiveFile();
 		const activeExt = activeFile ? activeFile.extension.toLowerCase() : "";
 		if (!activeFile || (activeExt !== "md" && !EXAM_SOURCE_EXTS.includes(activeExt))) {
-			el.createDiv({ text: t("请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）"), attr: { style: "color:var(--text-muted);text-align:center;padding:30px 0;font-size:19px;" } });
+			emptyState(el, t("请先打开一个试卷文件（md/txt/rtf/docx/pdf/图片）"));
 		} else {
 			const info = el.createDiv({ attr: { style: "padding:8px 10px;border-radius:6px;background:var(--background-secondary);border:1px solid var(--background-modifier-border);margin-bottom:12px;font-size:17px;" } });
 			info.createSpan({ text: t("当前文件：") });
@@ -168,12 +169,10 @@ export async function extractFromExamSelected(view: MainSidebarView) {
 			const normalized = normalizeExamContent(fixSequentialNumbers(cleanText));
 			const safeBase = file.basename.replace(/[<>:"/\\|?*]/g, "_");
 			const savePath = saveFolder + "/" + safeBase + " - AI识别.md";
-			const dateStr = new Date().toISOString().slice(0, 10);
+			const dateStr = localDateStr();
 			const allTags = ["试卷", "AI识别", ...aiTags.filter(t => t !== "试卷" && t !== "AI识别")];
 			const sourceLink = "[[" + file.basename + "]]";
-			const qIvls = parseReviewIntervals(view.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS);
-			const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + qIvls[0]!);
-			const fmB = buildFM({ source: sourceLink, sourcePath: file.path, date: dateStr, tags: allTags, nextReview: nextReviewDate.toISOString().slice(0, 10), interval: qIvls[0]!, correctCount: 0, wrongCount: 0 });
+			const fmB = buildFM({ source: sourceLink, sourcePath: file.path, date: dateStr, tags: allTags, nextReview: addDaysStr(dateStr, 1), interval: 1, correctCount: 0, wrongCount: 0, easeFactor: clampEase(view.plugin.settings.questionEaseFactor), repetitions: 0, lapses: 0 });
 			const kTagsB = knowledgeTags(allTags.filter(t => t !== "试卷" && t !== "AI识别"));
 			const knowledgeLinksB = kTagsB.length > 0 ? "\n\n---\n\n**知识点：** " + kTagsB.map(t => "[[" + t + "]]").join(" ") + "\n" : "";
 			const saveContent = fmB + normalized + knowledgeLinksB;
@@ -287,12 +286,10 @@ export async function openCurrentFileExtract(view: MainSidebarView, file?: TFile
 		const normalized = normalizeExamContent(fixSequentialNumbers(cleanText));
 		const safeBase = target.basename.replace(/[<>:"/\\|?*]/g, "_");
 		const savePath = saveFolder + "/" + safeBase + " - AI识别.md";
-		const dateStr = new Date().toISOString().slice(0, 10);
+		const dateStr = localDateStr();
 		const allTags = ["试卷", "AI识别", ...aiTags.filter(t => t !== "试卷" && t !== "AI识别")];
 		const sourceLink = "[[" + target.basename + "]]";
-		const qIvls = parseReviewIntervals(view.plugin.settings.questionReviewIntervals, DEFAULT_QUESTION_INTERVALS);
-		const nextReviewDate = new Date(); nextReviewDate.setDate(nextReviewDate.getDate() + qIvls[0]!);
-		const fm = buildFM({ source: sourceLink, sourcePath: target.path, date: dateStr, tags: allTags, nextReview: nextReviewDate.toISOString().slice(0, 10), interval: qIvls[0]!, correctCount: 0, wrongCount: 0 });
+		const fm = buildFM({ source: sourceLink, sourcePath: target.path, date: dateStr, tags: allTags, nextReview: addDaysStr(dateStr, 1), interval: 1, correctCount: 0, wrongCount: 0, easeFactor: clampEase(view.plugin.settings.questionEaseFactor), repetitions: 0, lapses: 0 });
 		const kTags = knowledgeTags(allTags.filter(t => t !== "试卷" && t !== "AI识别"));
 		const knowledgeLinks = kTags.length > 0 ? "\n\n---\n\n**知识点：** " + kTags.map(t => "[[" + t + "]]").join(" ") + "\n" : "";
 		const saveContent = fm + normalized + knowledgeLinks;
