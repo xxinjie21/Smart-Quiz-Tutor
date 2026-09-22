@@ -6,6 +6,8 @@ export default defineConfig(
 	globalIgnores([
 		'node_modules',
 		'dist',
+		'.workbuddy-ai',
+		'.workbuddy-ai/**',
 		'esbuild.config.mjs',
 		'version-bump.mjs',
 		'versions.json',

@@ -4,16 +4,19 @@ import type QuestionGeneratorPlugin from "../main";
 import { CHAT_RETRIEVE_LIMIT, AI_REQUEST_TIMEOUT_MS, CHAT_CANDIDATE_LIMIT, TOKEN_WARN_THRESHOLD, REF_CAPTURE_MAX } from "../constants";
 import type { ChatMessage, ChatSearchScope, ChatSession } from "../types";
 import { chatMessage } from "../services/llmService";
-import { getScopeFiles, retrieveContext, buildChatPrompt, rankCandidates, buildReferenceBlock, isCasualQuery, normalizePluginDirs, type RetrievedChunk } from "../services/chatService";
+import { getScopeFiles, retrieveContext, buildChatPrompt, buildCompressPrompt, rankCandidates, buildReferenceBlock, isCasualQuery, normalizePluginDirs, type RetrievedChunk } from "../services/chatService";
 import { estimateTokens } from "../utils/text";
 import { NotePickerModal } from "./notePickerModal";
 import { openInput, openConfirm } from "./ui/modals";
 import {
 	autoTitle,
+	buildRequestMessages,
+	collectSummaries,
 	genId,
 	loadSessions,
 	createSession,
 	deleteSession,
+	planCompression,
 	renameSession,
 	saveSession,
 	type ChatAdapter,
@@ -50,6 +53,7 @@ export class ChatPanel {
 	private inputEl: HTMLTextAreaElement | null = null;
 	private sendBtn: HTMLButtonElement | null = null;
 	private stopBtn: HTMLButtonElement | null = null;
+	private compressBtn: HTMLButtonElement | null = null;
 	private sessionSel: HTMLSelectElement | null = null;
 	private scopeSel: HTMLSelectElement | null = null;
 	private panelEl: HTMLElement | null = null;
@@ -64,6 +68,10 @@ export class ChatPanel {
 	private renderChildren: MarkdownRenderChild[] = [];
 
 	private references: ChatRef[] = [];
+	/** 引用文件选择器的文件夹展开状态：放在面板上，弹窗关掉重开也能保持展开。 */
+	private notePickerExpanded = new Set<string>();
+	/** 正在压缩上下文（期间禁用按钮、显示停止按钮）。 */
+	private compressing = false;
 	private aiCancelled = false;
 	private cancelWaiters: (() => void)[] = [];
 	private autoScroll = true;
@@ -92,6 +100,7 @@ export class ChatPanel {
 		this.inputEl = null;
 		this.sendBtn = null;
 		this.stopBtn = null;
+		this.compressBtn = null;
 		this.sessionSel = null;
 		this.scopeSel = null;
 		this.panelEl = null;
@@ -107,9 +116,15 @@ export class ChatPanel {
 		for (const w of waiters) w();
 	}
 
+	/**
+	 * 开始新一轮请求前复位取消标记。
+	 *
+	 * 这里**不清空** `cancelWaiters`：`cancelAI()` 已经把它们全部结算并清空了，
+	 * 再清一次只会让「上一轮仍在飞行中的请求」失去取消能力（其 waiter 被丢掉后，
+	 * `finally` 里的 `indexOf` 返回 -1，不会报错，但再也取消不掉）。
+	 */
 	resetAI() {
 		this.aiCancelled = false;
-		this.cancelWaiters = [];
 	}
 
 	// ===================== 初始化 & 数据 =====================
@@ -293,6 +308,10 @@ export class ChatPanel {
 		const refFileBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("从文件选择器添加引用"), "aria-label": t("从文件选择器添加引用") } });
 		safeIcon(refFileBtn, "file-plus");
 		refFileBtn.addEventListener("click", () => this.pickFilesAsReferences());
+		// 压缩上下文：把较早的消息交给 AI 归纳成一段摘要，后续请求只带摘要 + 末尾几轮
+		this.compressBtn = bar.createEl("button", { cls: "qg-chat-icon-btn", attr: { title: t("压缩上下文"), "aria-label": t("压缩上下文") } });
+		safeIcon(this.compressBtn, "archive");
+		this.compressBtn.addEventListener("click", () => void this.compressContext());
 		bar.createDiv({ cls: "qg-chat-spacer" });
 		this.stopBtn = bar.createEl("button", { cls: "qg-chat-icon-btn qg-chat-stop", attr: { title: t("停止"), "aria-label": t("停止") } });
 		safeIcon(this.stopBtn, "square");
@@ -470,6 +489,72 @@ export class ChatPanel {
 		new Notice(t("已清空当前会话"));
 	}
 
+	// ===================== 上下文压缩 =====================
+
+	/** 按当前会话的可压缩程度刷新按钮的禁用/变暗状态与提示文案。 */
+	private updateCompressBtn() {
+		const btn = this.compressBtn;
+		if (!btn) return;
+		const plan = planCompression(this.activeSession?.messages || []);
+		btn.disabled = this.compressing;
+		btn.toggleClass("is-busy", this.compressing);
+		// 消息太少时按钮变暗，但仍可点击——点一下会弹出「不需要压缩」的说明，比灰着不给反馈更好
+		btn.toggleClass("is-off", !plan && !this.compressing);
+		const title = this.compressing
+			? t("正在压缩上下文…")
+			: plan
+				? tf("把较早的 {n} 条消息压缩成摘要，节省上下文", { n: plan.older.length })
+				: t("消息太少，暂时不需要压缩");
+		btn.setAttribute("title", title);
+		btn.setAttribute("aria-label", title);
+	}
+
+	/**
+	 * 压缩上下文：把较早的消息交给 AI 归纳成一段摘要，只保留末尾几轮原文。
+	 *
+	 * 摘要以 `summary: true` 的消息存回会话，后续请求把摘要并入 system（见 `collectSummaries`），
+	 * 因此即使会话继续变长，摘要也不会被 `slice(-N)` 切掉。
+	 */
+	async compressContext() {
+		if (this.compressing) return;
+		if (this.initPromise) await this.initPromise;
+		const session = this.activeSession;
+		if (!session) { new Notice(t("还没有会话")); return; }
+		const plan = planCompression(session.messages);
+		if (!plan) { new Notice(t("消息太少，暂时不需要压缩")); return; }
+		const ok = await openConfirm(this.app, {
+			text: tf("将把较早的 {n} 条消息合并成一段摘要，原始消息不再保留。确定继续？", { n: plan.older.length }),
+		});
+		if (!ok) return;
+
+		this.compressing = true;
+		this.updateCompressBtn();
+		this.stopBtn?.show();
+		this.resetAI();
+		this.appendWarn(t("正在压缩上下文…"));
+		try {
+			const summary = (await this.requestChat(
+				[{ role: "user", content: buildCompressPrompt(plan.older) }],
+				t("你是一个对话摘要助手，负责把长对话压缩成信息密度高的简短摘要。"),
+			)).trim();
+			if (this.aiCancelled) return;
+			if (!summary) { this.appendError(t("AI 没有返回摘要内容")); return; }
+			// 用一条摘要替换掉被压缩的那批消息，末尾的近期消息原样保留
+			session.messages = [{ role: "assistant", content: summary, summary: true }, ...plan.kept];
+			session.updatedAt = Date.now();
+			await this.persist();
+			this.renderMessages();
+			new Notice(tf("已把 {n} 条消息压缩成摘要", { n: plan.older.length }));
+		} catch (err) {
+			console.error("compress context failed", err);
+			if (!this.aiCancelled) this.appendError((err as Error).message || String(err));
+		} finally {
+			this.compressing = false;
+			this.stopBtn?.hide();
+			this.updateCompressBtn();
+		}
+	}
+
 	// ===================== 消息渲染 =====================
 
 	private renderRefs() {
@@ -503,10 +588,15 @@ export class ChatPanel {
 			const empty = this.messagesEl.createDiv({ cls: "qg-chat-empty" });
 			safeIcon(empty.createDiv({ cls: "qg-chat-empty-icon" }), "sparkles");
 			empty.createDiv({ text: this.activeSession ? t("与我聊聊吧，我可以基于你的笔记回答问题。") : t("还没有会话，点击上方 ＋ 新建一个开始对话。") });
+			this.updateCompressBtn();
 			return;
 		}
-		history.forEach((m, i) => this.appendBubble(m.role, m.content, [], i));
+		history.forEach((m, i) => {
+			if (m.summary) this.appendSummaryBubble(m);
+			else this.appendBubble(m.role, m.content, [], i);
+		});
 		this.scrollToBottom(true);
+		this.updateCompressBtn();
 	}
 
 	/**
@@ -551,6 +641,35 @@ export class ChatPanel {
 			safeIcon(reBtn, "rotate-ccw");
 			reBtn.addEventListener("click", () => this.regenerate(historyIndex));
 		}
+		this.scrollToBottom();
+	}
+
+	/**
+	 * 「压缩上下文」生成的摘要用一张可折叠卡片渲染，而不是普通气泡——
+	 * 让用户一眼看出这段内容是被折叠掉的历史，且默认收起、不占屏幕。
+	 */
+	private appendSummaryBubble(m: ChatMessage) {
+		if (!this.messagesEl) return;
+		this.messagesEl.querySelector(".qg-chat-empty")?.remove();
+		const card = this.messagesEl.createDiv({ cls: "qg-chat-summary" });
+		const head = card.createDiv({ cls: "qg-chat-summary-head" });
+		safeIcon(head.createSpan({ cls: "qg-chat-summary-icon" }), "archive");
+		head.createSpan({ text: t("历史上下文摘要"), cls: "qg-chat-summary-title" });
+		const toggle = head.createSpan({ cls: "qg-chat-summary-toggle", text: t("展开") });
+		const body = card.createDiv({ cls: "qg-chat-summary-body is-collapsed" });
+		const child = this.component.addChild(new MarkdownRenderChild(body));
+		this.renderChildren.push(child);
+		void MarkdownRenderer.render(this.app, m.content, body, this.app.workspace.getActiveFile()?.path || "", child);
+		let open = false;
+		toggle.addEventListener("click", () => {
+			open = !open;
+			body.toggleClass("is-collapsed", !open);
+			toggle.setText(open ? t("收起") : t("展开"));
+		});
+		const actions = card.createDiv({ cls: "qg-chat-actions" });
+		const copyBtn = actions.createEl("button", { cls: "qg-chat-mini-btn", attr: { title: t("复制"), "aria-label": t("复制") } });
+		safeIcon(copyBtn, "copy");
+		copyBtn.addEventListener("click", () => void this.copyText(m.content));
 		this.scrollToBottom();
 	}
 
@@ -639,7 +758,7 @@ export class ChatPanel {
 	}
 
 	private pickFilesAsReferences() {
-		new NotePickerModal(this.app, (files) => void this.addFilesAsReferences(files)).open();
+		new NotePickerModal(this.app, (files) => void this.addFilesAsReferences(files), this.notePickerExpanded).open();
 	}
 
 	private async addFilesAsReferences(files: TFile[]) {
@@ -750,12 +869,16 @@ export class ChatPanel {
 			}
 			const prompt = buildChatPrompt(text, chunks, scope);
 
-			const messages: ChatMessage[] = target.messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+			const messages: ChatMessage[] = buildRequestMessages(target.messages);
 			const refBlock = buildReferenceBlock(this.references, this.plugin.settings.chatRefBudget ?? 60000, { query: text });
 			const hasContext = chunks.length > 0 || this.references.length > 0;
-			const system = hasContext
+			// 历史摘要并入 system：它不是一轮真实对话，混进 messages 会让模型误以为那是自己说过的话。
+			// 放在这里也意味着它不受末尾 N 条消息的裁剪影响。
+			const summaries = collectSummaries(target.messages);
+			const summaryBlock = summaries.length > 0 ? t("【本次会话较早内容的摘要】") + "\n" + summaries.join("\n\n") + "\n\n" : "";
+			const system = summaryBlock + (hasContext
 				? "你是智学助手，一个帮助用户基于 Obsidian 笔记学习与复习的 AI 助手。回答要依据提供的参考资料，并在关键信息后标注来源。\n\n" + refBlock + prompt
-				: "你是智学助手，一个帮助用户学习与复习的 AI 助手。请简洁、准确地回答用户问题。\n\n" + prompt;
+				: "你是智学助手，一个帮助用户学习与复习的 AI 助手。请简洁、准确地回答用户问题。\n\n" + prompt);
 			if (this.references.length) { this.references = []; this.renderRefs(); }
 
 			const est = estimateTokens(system + text);
@@ -776,6 +899,7 @@ export class ChatPanel {
 		} finally {
 			this.stopBtn?.hide();
 			if (this.sendBtn) this.sendBtn.disabled = false;
+			this.updateCompressBtn();
 		}
 	}
 

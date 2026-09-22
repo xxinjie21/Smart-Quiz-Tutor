@@ -11,6 +11,48 @@ if you want to view the source, please visit the github repository of this plugi
 
 const prod = process.argv[2] === 'production';
 
+/**
+ * 依赖里「动态注入 <script>」的浏览器异步调度代码。
+ *
+ * 这几处都落在 `process.browser` 为假、或 `canUseNextTick()` 为真的**死分支**里，
+ * 运行时永远不会执行，但 Obsidian 插件审核的 no-dynamic-script 规则只看源码文本，
+ * 所以必须在打包阶段清掉。
+ *
+ * 这里踩过两个坑，正则必须同时容忍：
+ * 1. `immediate` 源码用的是**单引号**（`'document' in global`）——只匹配双引号会静默漏掉；
+ * 2. 标识符可能含 `$`（压缩后出现 `$x`）——`\w+` 匹配不到，必须用 `[\w$.]`。
+ */
+const SCRIPT_CALL = "[\\w$.]+\\.createElement\\(\\s*['\"]script['\"]\\s*\\)";
+/** `'document' in X && 'onreadystatechange' in X.document.createElement('script')` */
+const RE_SCRIPT_COND_FULL = new RegExp("['\"]document['\"]\\s*in\\s*[\\w$.]+\\s*&&\\s*['\"]onreadystatechange['\"]\\s*in\\s*" + SCRIPT_CALL, 'g');
+/** `X && 'onreadystatechange' in X.createElement('script')` */
+const RE_SCRIPT_COND_AND = new RegExp("[\\w$.]+\\s*&&\\s*['\"]onreadystatechange['\"]\\s*in\\s*" + SCRIPT_CALL, 'g');
+/** 裸的 `'onreadystatechange' in X.createElement('script')` */
+const RE_SCRIPT_COND_BARE = new RegExp("['\"]onreadystatechange['\"]\\s*in\\s*" + SCRIPT_CALL, 'g');
+
+/**
+ * setimmediate 的 `installReadyStateChangeImplementation`：函数体里是**裸的**
+ * `doc.createElement("script")`，不在任何条件里，条件折叠删不掉它。
+ *
+ * 它只在 `canUseNextTick()` / `canUsePostMessage()` / `canUseMessageChannel()` 全为假时才被调用，
+ * 而 Obsidian 的 Electron 渲染进程里 `canUseNextTick()` 恒为真 —— 该函数不可达。
+ * 把函数体换成 setTimeout 兜底实现（语义上等价于它后面那个 installSetTimeoutImplementation），
+ * 产物里就不会再有动态脚本注入。
+ */
+const RE_SETIMMEDIATE_READYSTATE = /function\s+installReadyStateChangeImplementation\s*\(\s*\)\s*\{[\s\S]{0,1500}?html\.appendChild\(script\);\s*\};\s*\}/;
+
+/**
+ * 把浏览器分支的条件整体折叠成字面量 `false`。
+ *
+ * 这样 esbuild 的常量折叠会直接把那一整段分支删掉，产物里不会再出现 `createElement("script")`。
+ * 比起事后对**压缩产物**做文本手术（变量名一变就静默失效），在源码阶段折叠可靠得多。
+ */
+function dropScriptInjectionConditions(code) {
+	code = code.replace(RE_SCRIPT_COND_FULL, 'false');
+	code = code.replace(RE_SCRIPT_COND_AND, 'false');
+	return code.replace(RE_SCRIPT_COND_BARE, 'false');
+}
+
 const context = await esbuild.context({
 	banner: {
 		js: banner,
@@ -36,12 +78,22 @@ const context = await esbuild.context({
 	plugins: [{
 		name: 'drop-browser-code',
 		setup(build) {
-			build.onLoad({ filter: /jszip|immediate|setimmediate/ }, (args) => {
+			// 过滤范围必须覆盖**所有** js 文件：mammoth 这类浏览器版预打包产物会把
+			// immediate / setimmediate 内联进来，路径里既没有 "immediate" 也没有 "jszip"，
+			// 只按包名过滤会漏掉它们（2026-09 那次构建护栏报警就是这么来的）。
+			build.onLoad({ filter: /\.(?:js|mjs|cjs)$/ }, (args) => {
 				let code = readFileSync(args.path, 'utf8');
-				code = code.replace(/typeof\s+window\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
-				code = code.replace(/typeof\s+document\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
-				code = code.replace(/"document"\s*in\s*\w+/g, '"none"in 0');
-				code = code.replace(/"onreadystatechange"\s*in\s*\w+(?:\.\w+)?\.createElement\(["']script["']\)/g, 'false');
+				const original = code;
+				// 先折叠 script 注入条件，再做其它替换：顺序反了条件就被改得匹配不上了
+				code = dropScriptInjectionConditions(code);
+				if (/jszip|immediate|setimmediate/.test(args.path)) {
+					code = code.replace(/typeof\s+window\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
+					code = code.replace(/typeof\s+document\s*([!=]==)\s*['"](?:undefined|object)['"]/g, 'true');
+					code = code.replace(/"document"\s*in\s*\w+/g, '"none"in 0');
+					code = code.replace(/"onreadystatechange"\s*in\s*\w+(?:\.\w+)?\.createElement\(["']script["']\)/g, 'false');
+					code = code.replace(RE_SETIMMEDIATE_READYSTATE, 'function installReadyStateChangeImplementation() { installSetTimeoutImplementation(); }');
+				}
+				if (code === original) return null;
 				return { contents: code, loader: 'js' };
 			});
 		}

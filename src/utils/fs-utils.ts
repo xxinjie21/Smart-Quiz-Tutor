@@ -8,8 +8,15 @@ import { getElectronShell } from "./electron";
 /** vault 之外的文件被删除时移入的同级子目录名（回收站不可用时的兜底）。 */
 export const TRASH_DIR_NAME = ".qg-trash";
 
+/**
+ * 是否为 vault 之外的绝对路径。
+ *
+ * 覆盖三种写法：Windows 盘符（`C:\` / `C:/`）、UNC 网络共享（`\\server\share`，
+ * 归一化后也可能是 `//server/share`）、以及以 `/` 开头的类 Unix 路径。
+ * 漏掉 UNC 会让网络共享上的文件被当成 vault 内相对路径，读写全部失败。
+ */
 export function isAbs(p: string): boolean {
-	return /^[A-Za-z]:[/\\]/.test(p) || p.startsWith("/");
+	return /^[A-Za-z]:[/\\]/.test(p) || /^\\\\/.test(p) || /^\/\//.test(p) || p.startsWith("/");
 }
 
 export function daysUntil(dateStr: string): number {

@@ -1,5 +1,6 @@
-import type { ChatSearchScope } from "../types";
+import type { ChatMessage, ChatSearchScope } from "../types";
 import { REF_HEAD_CHARS, REF_SNIPPET_CHARS, REF_SNIPPET_MAX } from "../constants";
+import { t } from "../i18n/index";
 
 export interface ScopeFile {
 	path: string;
@@ -326,4 +327,27 @@ ${lines.join("\n\n")}
 
 --- 问题 ---
 ${query}`;
+}
+
+/**
+ * 「压缩上下文」用的提示词：把较早的一批消息交给 AI 归纳成一段可续聊的摘要。
+ *
+ * 被压缩的消息里可能已经包含上一次压缩产生的摘要，因此按「已有摘要」标注，
+ * 让模型做的是「摘要的摘要」而不是把它当成助手原话。
+ */
+export function buildCompressPrompt(older: ChatMessage[]): string {
+	const lines = older.map(m => {
+		const who = m.summary ? t("【已有摘要】") : m.role === "user" ? t("用户：") : t("助手：");
+		return who + m.content;
+	});
+	// 逐条列出而不是塞进一个大字符串：key 保持单行，字典里不必写 \n 转义
+	const instruction = [
+		t("请把下面这段对话历史压缩成一份简洁的摘要，供后续对话继续使用。"),
+		t("要求："),
+		t("1. 保留：用户的目标与关注点、已经确认的结论、涉及的文件名与知识点、尚未解决的问题。"),
+		t("2. 丢弃：寒暄、重复表述、被推翻的中间过程。"),
+		t("3. 不要编造对话中没有出现的信息。"),
+		t("4. 直接输出摘要正文，不要写「摘要：」之类的标题，也不要用代码块包裹。"),
+	].join("\n");
+	return instruction + "\n\n" + t("对话历史：") + "\n" + lines.join("\n");
 }

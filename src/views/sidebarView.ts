@@ -11,6 +11,7 @@ import type { WrongAnswerNote, ParsedQuestion, TreeNode, FmValue, FileMeta } fro
 import type { IndexSource } from "../services/knowledgeService";
 import { patchFrontmatter, knowledgeTags } from "../utils/frontmatter";
 import { isAbs, writeFileStr, readFileStr, ensureFolder, isImageFile, isDocumentFile, EXAM_SOURCE_EXTS, joinPath, trashFileAbs } from "../utils/fs-utils";
+import { safeName } from "../utils/text";
 import { convertDocumentToText } from "../services/documentService";
 import { sm2Update, DEFAULT_EASE_FACTOR, type Sm2Result } from "../utils/sm2";
 import { buildFileTree } from "../utils/filetree";
@@ -376,10 +377,14 @@ async wrongExportAnswerOnly(note: WrongAnswerNote) { return wrongExportAnswerOnl
 			} catch { /* skip */ }
 		}
 		if (parts.length === 0) { new Notice(t("所选文件均无法读取")); return; }
-		const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: title + ".md", filters: [{ name: "Markdown", extensions: ["md"] }] });
-		if (r.canceled || !r.filePath) return;
-		fs.writeFileSync(r.filePath, parts.join("\n\n---\n\n"), "utf-8");
-		new Notice(tf("已导出 {n} 个文件", { n: parts.length }));
+		// 取 remote / 写盘都可能失败（环境不支持 remote、目标只读、磁盘满），必须自己兜住，
+		// 否则调用方的 `void adminExportFiles(...)` 会留下未处理的 rejection。
+		try {
+			const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: title + ".md", filters: [{ name: "Markdown", extensions: ["md"] }] });
+			if (r.canceled || !r.filePath) return;
+			fs.writeFileSync(r.filePath, parts.join("\n\n---\n\n"), "utf-8");
+			new Notice(tf("已导出 {n} 个文件", { n: parts.length }));
+		} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 	}
 
 	async updateReviewSchedule(note: WrongAnswerNote, source: "wrong" | "question" | "note", quality: number): Promise<Sm2Result> {
@@ -574,9 +579,15 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		for (const w of waiters) w();
 	}
 
+	/**
+	 * 开始新一轮请求前复位取消标记。
+	 *
+	 * 这里**不清空** `cancelWaiters`：`cancelAI()` 已经把它们全部结算并清空了，
+	 * 再清一次只会让「上一轮仍在飞行中的请求」失去取消能力（其 waiter 被丢掉后，
+	 * `finally` 里的 `indexOf` 返回 -1，不会报错，但再也取消不掉）。
+	 */
 	resetAI() {
 		this.aiCancelled = false;
-		this.cancelWaiters = [];
 	}
 
 	async callAIWithPrompt(prompt: string, images?: string[], opts?: ChatLLMOptions): Promise<string> {
@@ -626,13 +637,21 @@ loadPickerFiles() { return loadPickerFilesSection(this); }
 		await this.app.fileManager.trashFile(this.vaultFile(file.path));
 	}
 
-	/** 重命名列表项（同目录内改名，保持 .md）。 */
+	/**
+	 * 重命名列表项（同目录内改名，保持 .md）。
+	 *
+	 * `newName` 来自输入框，必须按**不可信输入**处理：这里再过一遍 `safeName`，只保留末段文件名。
+	 * 否则 `a/b` 会把文件挪进（可能不存在的）子目录，`../../x` 能把它移出原目录、甚至移出 vault。
+	 */
 	async renameListFile(file: FileMeta, newName: string): Promise<void> {
+		const safe = safeName(newName);
+		if (!safe) throw new Error(t("文件名不合法"));
+		if (safe === file.basename) return;
 		if (isAbs(file.path)) {
-			fs.renameSync(file.path, path.join(path.dirname(file.path), newName + ".md"));
+			fs.renameSync(file.path, path.join(path.dirname(file.path), safe + ".md"));
 			return;
 		}
-		await this.app.vault.rename(this.vaultFile(file.path), file.path.replace(/[^/]+$/, newName + ".md"));
+		await this.app.vault.rename(this.vaultFile(file.path), file.path.replace(/[^/]+$/, safe + ".md"));
 	}
 
 	/** 读取原始字节：vault 之外的文件走 fs，vault 内的走 vault API。 */

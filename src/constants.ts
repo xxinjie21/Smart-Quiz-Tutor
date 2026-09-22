@@ -77,6 +77,10 @@ export const CHAT_HISTORY_LIMIT = 50;
 export const CHAT_RETRIEVE_LIMIT = 5;
 export const CHAT_CANDIDATE_LIMIT = 60;
 export const CHAT_TITLE_MAX = 20;
+/** 单次请求携带的普通消息条数上限（摘要另行并入 system，不占这个额度）。 */
+export const CHAT_REQUEST_MESSAGES = 10;
+/** 压缩上下文时原样保留在末尾的消息条数（对半，保证「提问 + 回答」成对留下）。 */
+export const CHAT_COMPRESS_KEEP_RECENT = 4;
 /** 引用拼装：头部保留字数、单片段字数、最多片段数。 */
 export const REF_HEAD_CHARS = 1500;
 export const REF_SNIPPET_CHARS = 700;

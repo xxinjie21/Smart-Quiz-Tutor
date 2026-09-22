@@ -11,6 +11,7 @@ import { getElectronRemote } from "../../utils/electron";
 import { isAbs, listMdFilesRecursive, isExcludedPath } from "../../utils/fs-utils";
 import { debounce } from "../../utils/debounce";
 import { knowledgeTags } from "../../utils/frontmatter";
+import { safeName } from "../../utils/text";
 import { matchQuery } from "../../utils/list";
 import { groupBySource, groupByTag, formatFileSize, formatDateShort } from "../../utils/listView";
 import { segBar, statsBadges, emptyState, searchField, collapseGroup } from "./shared/ui";
@@ -137,31 +138,37 @@ export async function renderQuestionsTab(view: MainSidebarView) {
 				});
 				actBtn("📤", t("导出"), () => {
 					void (async () => {
-						const content = await view.readFileText(file);
-						const clean = content.replace(/^---[\s\S]*?---\s*/, "");
-						const baseName = file.basename.replace(/_试题.*$/, "");
-						const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: file.basename + ".docx", filters: [{ name: "Word", extensions: ["docx"] }, { name: "PDF", extensions: ["pdf"] }, { name: "Markdown", extensions: ["md"] }] });
-						if (r.canceled || !r.filePath) return;
-						const fp = r.filePath;
-						if (fp.endsWith(".docx")) {
-							const children = buildWordParagraphs(clean, baseName + t(" 配套试题"), baseName);
-							const doc = new Document({ sections: [{ properties: {}, children }] });
-							const buffer = await Packer.toBuffer(doc);
-							fs.writeFileSync(fp, Buffer.from(buffer));
-							new Notice(t("Word已保存"));
-						} else if (fp.endsWith(".pdf")) {
-							await exportPdfDirect(fp, clean, baseName + t(" 配套试题"), baseName);
-							new Notice(t("PDF已保存"));
-						} else {
-							fs.writeFileSync(fp, clean, "utf-8");
-							new Notice(t("Md已保存"));
-						}
+						// remote 不可用 / 写盘失败 / PDF 打印失败都要给出提示，
+						// 否则这个 `void (async () => …)()` 会留下未处理的 rejection。
+						try {
+							const content = await view.readFileText(file);
+							const clean = content.replace(/^---[\s\S]*?---\s*/, "");
+							const baseName = file.basename.replace(/_试题.*$/, "");
+							const r = await getElectronRemote().dialog.showSaveDialog({ defaultPath: file.basename + ".docx", filters: [{ name: "Word", extensions: ["docx"] }, { name: "PDF", extensions: ["pdf"] }, { name: "Markdown", extensions: ["md"] }] });
+							if (r.canceled || !r.filePath) return;
+							const fp = r.filePath;
+							if (fp.endsWith(".docx")) {
+								const children = buildWordParagraphs(clean, baseName + t(" 配套试题"), baseName);
+								const doc = new Document({ sections: [{ properties: {}, children }] });
+								const buffer = await Packer.toBuffer(doc);
+								fs.writeFileSync(fp, Buffer.from(buffer));
+								new Notice(t("Word已保存"));
+							} else if (fp.endsWith(".pdf")) {
+								await exportPdfDirect(fp, clean, baseName + t(" 配套试题"), baseName);
+								new Notice(t("PDF已保存"));
+							} else {
+								fs.writeFileSync(fp, clean, "utf-8");
+								new Notice(t("Md已保存"));
+							}
+						} catch (err) { new Notice(tf("导出失败：{msg}", { msg: (err as Error).message })); }
 					})();
 				});
 				actBtn("✏", t("重命名"), () => {
 					void (async () => {
 						const input = await openInput(view.app, { title: t("输入新文件名（不含扩展号）："), initial: file.basename });
-						const newName = input?.trim();
+						// 输入框内容是不可信的：先按 safeName 归一化，避免 `a/b` 把文件挪进子目录、
+						// `../../x` 把它移出原目录（详见 renameListFile 的注释）。
+						const newName = safeName((input ?? "").trim());
 						if (!newName || newName === file.basename) return;
 						try {
 							await view.renameListFile(file, newName);

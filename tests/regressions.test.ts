@@ -1,13 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
 import { parseFM, patchFrontmatter } from "../src/utils/frontmatter";
-import { trashFileAbs, TRASH_DIR_NAME, isExcludedPath } from "../src/utils/fs-utils";
+import { trashFileAbs, TRASH_DIR_NAME, isExcludedPath, isAbs } from "../src/utils/fs-utils";
 import { stripAnswersForExport, extractAnswersForExport, safeName } from "../src/utils/text";
 import { parseExamBlocks, stripMdBold } from "../src/utils/exporter";
 import { normalizePluginDirs, isCasualQuery } from "../src/services/chatService";
+import { joinApiUrl } from "../src/services/llmService";
+import { stripRtf, decodeTextBytes } from "../src/services/documentService";
 import { clampSettingValue, SETTING_SECTIONS, type SettingItem } from "../src/views/settingsSchema";
 import { parseAITagsFromResult } from "../src/services/questionService";
 import {
@@ -16,10 +18,12 @@ import {
 	QUESTION_NOTE_DEFAULTS,
 	NOTE_VIEW_DEFAULTS,
 } from "../src/services/vaultDataService";
-import { EASE_PRESETS, EASE_MIN, EASE_MAX, MAX_INTERVAL_DAYS } from "../src/constants";
+import { EASE_PRESETS, EASE_MIN, EASE_MAX, MAX_INTERVAL_DAYS, CHAT_HISTORY_LIMIT } from "../src/constants";
 import { sm2Update, clampEase, DEFAULT_EASE_FACTOR } from "../src/utils/sm2";
 import { isDueForReview, todayStr } from "../src/utils/review";
 import { openConfirm, openInput } from "../src/views/ui/modals";
+import { capMessages, planCompression, collectSummaries, buildRequestMessages } from "../src/utils/chatStorage";
+import type { ChatMessage } from "../src/types";
 
 /** 提示词（QUESTION_FORMAT_RULES 铁律 2）强制 AI 输出加粗题号，这里全部按加粗形式构造。 */
 const BOLD_EXAM = [
@@ -590,5 +594,177 @@ describe("toNote 默认值语义", () => {
 		expect(n.interval).toBe(1);
 		expect(n.wrongCount).toBe(1);
 		expect(n.easeFactor).toBe(2.5);
+	});
+});
+
+describe("electron remote 兜底（remote 缺失时不再抛 TypeError）", () => {
+	afterEach(() => {
+		vi.doUnmock("electron");
+		vi.resetModules();
+	});
+
+	it("remote 缺失时 getElectronShell 返回 null，getElectronRemote 抛本地化错误", async () => {
+		vi.resetModules();
+		vi.doMock("electron", () => ({ remote: undefined, shell: undefined }));
+		const mod = await import("../src/utils/electron");
+		// 旧实现写的是 `[electronShell, remote.shell]`：数组字面量会先求值 remote.shell，
+		// remote 缺失时直接抛 TypeError，兜底函数永远返回不了 null，trashFileAbs 也就走不到 .qg-trash。
+		expect(mod.getElectronShell()).toBeNull();
+		expect(mod.hasElectronRemote()).toBe(false);
+		expect(() => mod.getElectronRemote()).toThrow(/electron remote/);
+	});
+
+	it("remote 存在但没有 shell 时同样返回 null（有可用的 shell 时优先用它）", async () => {
+		vi.resetModules();
+		const trashItem = () => Promise.resolve();
+		vi.doMock("electron", () => ({ remote: { dialog: {} }, shell: { trashItem } }));
+		const mod = await import("../src/utils/electron");
+		expect(mod.hasElectronRemote()).toBe(true);
+		expect(mod.getElectronShell()?.trashItem).toBe(trashItem);
+	});
+});
+
+describe("重命名文件名清洗（renameListFile 的前置条件）", () => {
+	it("safeName 抹掉路径分隔符，使拼出的路径无法越界", () => {
+		expect(safeName("a/b")).toBe("a_b");
+		expect(safeName("..\\..\\x")).toBe(".._.._x");
+		expect(safeName("../../x")).toBe(".._.._x");
+	});
+
+	it("safeName 把纯 `..` 归一化为空串（调用方据此拒绝重命名）", () => {
+		expect(safeName("..")).toBe("");
+		expect(safeName(".")).toBe("");
+		expect(safeName("   ")).toBe("");
+	});
+
+	it("正常名字与 .md 后缀处理不受影响", () => {
+		expect(safeName("第一章 测试")).toBe("第一章 测试");
+		expect(safeName("题目.md")).toBe("题目");
+	});
+});
+
+describe("RTF / 文本编码（GBK 不再整篇乱码）", () => {
+	it("按 \\ansicpg936 解码十六进制字节（你好 = GBK c4e3 bac3）", () => {
+		expect(stripRtf("{\\rtf1\\ansi\\ansicpg936\\deff0 \\'c4\\'e3\\'ba\\'c3}")).toBe("你好");
+	});
+
+	it("无 ansicpg 时仍按 UTF-8 解码（保持旧行为）", () => {
+		expect(stripRtf("\\'e4\\'bd\\'a0\\'e5\\'a5\\'bd")).toBe("你好");
+	});
+
+	it("ansicpg1252 + UTF-8 字节（畸形文件）仍能解出正确中文", () => {
+		expect(stripRtf("{\\rtf1\\ansi\\ansicpg1252 \\'e4\\'bd\\'a0\\'e5\\'a5\\'bd}")).toBe("你好");
+	});
+
+	it("decodeTextBytes 剥离 UTF-8 BOM", () => {
+		expect(decodeTextBytes(new Uint8Array([0xef, 0xbb, 0xbf, 0x61, 0x62]))).toBe("ab");
+	});
+
+	it("decodeTextBytes 对非 UTF-8 字节回退到 GBK", () => {
+		expect(decodeTextBytes(new Uint8Array([0xc4, 0xe3, 0xba, 0xc3]))).toBe("你好");
+	});
+
+	it("decodeTextBytes 保持 UTF-8 原文不变", () => {
+		expect(decodeTextBytes(new TextEncoder().encode("你好 abc"))).toBe("你好 abc");
+	});
+});
+
+describe("isAbs 支持 UNC 网络共享路径", () => {
+	it("识别 UNC / 盘符 / 类 Unix 绝对路径，相对路径不误判", () => {
+		expect(isAbs("\\\\server\\share\\a.md")).toBe(true);
+		expect(isAbs("//server/share/a.md")).toBe(true);
+		expect(isAbs("C://vault//a.md")).toBe(true);
+		expect(isAbs("/home/u/a.md")).toBe(true);
+		expect(isAbs("题目/a.md")).toBe(false);
+		expect(isAbs("")).toBe(false);
+	});
+});
+
+describe("joinApiUrl 归一化接口地址", () => {
+	it("去掉首尾空白与末尾多余斜杠", () => {
+		expect(joinApiUrl(" http://127.0.0.1:11434/ ", "/api/chat")).toBe("http://127.0.0.1:11434/api/chat");
+		expect(joinApiUrl("http://x///", "/api/generate")).toBe("http://x/api/generate");
+	});
+
+	it("base 已带 /v1 时不重复拼出 /v1/v1", () => {
+		expect(joinApiUrl("http://x/v1", "/v1/chat/completions")).toBe("http://x/v1/chat/completions");
+		expect(joinApiUrl("http://x", "/v1/chat/completions")).toBe("http://x/v1/chat/completions");
+	});
+
+	it("path 没有前导斜杠时自动补上", () => {
+		expect(joinApiUrl("http://x", "api/chat")).toBe("http://x/api/chat");
+	});
+});
+
+describe("设置项 baseUrl 归一化", () => {
+	const baseUrlItem = SETTING_SECTIONS.flatMap(s => s.items).find(i => i.key === "baseUrl") as SettingItem;
+
+	it("schema 里给 baseUrl 标了 normalize: url", () => {
+		expect(baseUrlItem.normalize).toBe("url");
+	});
+
+	it("clampSettingValue 去掉首尾空白与末尾斜杠", () => {
+		expect(clampSettingValue(baseUrlItem, " http://127.0.0.1:11434/ ")).toBe("http://127.0.0.1:11434");
+		expect(clampSettingValue(baseUrlItem, "http://x///")).toBe("http://x");
+	});
+
+	it("不擅自补协议（https 与内网域名都要保留原样）", () => {
+		expect(clampSettingValue(baseUrlItem, "192.168.1.9:11434")).toBe("192.168.1.9:11434");
+		expect(clampSettingValue(baseUrlItem, "https://api.example.com/v1")).toBe("https://api.example.com/v1");
+	});
+});
+
+describe("上下文压缩（planCompression / buildRequestMessages / capMessages）", () => {
+	/** 造 n 条消息：偶数下标是 user，奇数是 assistant。 */
+	const mk = (n: number): ChatMessage[] => Array.from({ length: n }, (_, i) => ({ role: i % 2 === 0 ? "user" : "assistant", content: "m" + i }) as ChatMessage);
+
+	it("planCompression 保留末尾 keepRecent 条，其余交给摘要", () => {
+		const plan = planCompression(mk(10), 4);
+		expect(plan?.older.length).toBe(6);
+		expect(plan?.kept.length).toBe(4);
+		expect(plan?.kept[0]?.content).toBe("m6");
+		expect(plan?.older[0]?.content).toBe("m0");
+	});
+
+	it("可压缩部分不足 2 条时返回 null（避免为 1 条消息发一次请求）", () => {
+		expect(planCompression(mk(4), 4)).toBeNull();
+		expect(planCompression(mk(5), 4)).toBeNull();
+		expect(planCompression(mk(6), 4)?.older.length).toBe(2);
+		expect(planCompression([], 4)).toBeNull();
+	});
+
+	it("buildRequestMessages 只取末尾 N 条普通消息，且不把 summary 字段带给模型", () => {
+		const msgs: ChatMessage[] = [{ role: "assistant", content: "S", summary: true }, ...mk(30)];
+		const out = buildRequestMessages(msgs, 10);
+		expect(out.length).toBe(10);
+		expect(out.some(m => m.content === "S")).toBe(false);
+		expect(out[9]?.content).toBe("m29");
+		expect(out.every(m => !("summary" in m))).toBe(true);
+	});
+
+	it("collectSummaries 按顺序汇总摘要正文，忽略空白摘要", () => {
+		const msgs: ChatMessage[] = [
+			{ role: "assistant", content: "S1", summary: true },
+			{ role: "user", content: "q" },
+			{ role: "assistant", content: "S2", summary: true },
+			{ role: "assistant", content: "   ", summary: true },
+		];
+		expect(collectSummaries(msgs)).toEqual(["S1", "S2"]);
+		expect(collectSummaries(mk(3))).toEqual([]);
+	});
+
+	it("capMessages 不淘汰摘要，否则压缩成果会被后续消息挤掉", () => {
+		const msgs: ChatMessage[] = [{ role: "assistant", content: "S", summary: true }, ...mk(CHAT_HISTORY_LIMIT * 2 + 20)];
+		const capped = capMessages(msgs);
+		expect(capped.length).toBe(CHAT_HISTORY_LIMIT * 2);
+		expect(capped[0]?.summary).toBe(true);
+		expect(capped[0]?.content).toBe("S");
+		// 末尾仍是最新消息
+		expect(capped[capped.length - 1]?.content).toBe("m" + (CHAT_HISTORY_LIMIT * 2 + 19));
+	});
+
+	it("capMessages 未超限时原样返回（保持引用不变）", () => {
+		const msgs = mk(10);
+		expect(capMessages(msgs)).toBe(msgs);
 	});
 });

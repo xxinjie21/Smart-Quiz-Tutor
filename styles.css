@@ -623,6 +623,44 @@ button.qg-interval-active:hover,
 	color: var(--text-muted);
 }
 
+/* ---- Context summary card（压缩上下文生成的摘要） ---- */
+.qg-chat-summary {
+	align-self: stretch;
+	max-width: 100%;
+	padding: 6px 10px;
+	border-radius: var(--qg-radius-md, 12px);
+	border: 1px dashed color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	background: color-mix(in srgb, var(--interactive-accent) 7%, var(--background-secondary));
+	font-size: 12.5px;
+}
+.qg-chat-summary-head { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.qg-chat-summary-icon { display: inline-flex; }
+.qg-chat-summary-icon svg { width: 14px; height: 14px; }
+.qg-chat-summary-title { flex: 1; font-weight: 600; }
+.qg-chat-summary-toggle {
+	cursor: pointer;
+	padding: 1px 6px;
+	border-radius: var(--qg-radius-pill, 999px);
+	border: 1px solid var(--qg-border, var(--background-modifier-border));
+	font-size: 11px;
+}
+.qg-chat-summary-toggle:hover { color: var(--interactive-accent); border-color: var(--interactive-accent); }
+.qg-chat-summary-body {
+	margin-top: 6px;
+	color: var(--text-normal);
+	line-height: 1.55;
+	overflow-wrap: anywhere;
+}
+.qg-chat-summary-body.is-collapsed { display: none; }
+.qg-chat-summary-body > :first-child { margin-top: 0; }
+.qg-chat-summary-body > :last-child { margin-bottom: 0; }
+/* 摘要卡片不在 .qg-chat-bubble-row 内，而 actions 默认 opacity:0，需要自己的显示规则 */
+.qg-chat-summary:hover .qg-chat-actions,
+.qg-chat-summary .qg-chat-actions:focus-within { opacity: 1; }
+
+/* 压缩进行中：按钮变暗且不可点 */
+.qg-chat-icon-btn.is-busy { opacity: 0.55 !important; cursor: default !important; }
+
 /* ---- Composer (pinned) ---- */
 .qg-chat-composer {
 	flex-shrink: 0;

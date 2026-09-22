@@ -19,6 +19,8 @@ export interface SettingItem {
 	suffix?: string;
 	presetKey?: string;
 	surface?: SettingSurface;
+	/** 文本类输入的取值归一化方式。 */
+	normalize?: "url";
 }
 
 export interface SettingSection {
@@ -86,7 +88,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
 		title: "API 配置",
 		items: [
 			{ key: "apiType", label: "接口类型", type: "select", options: [{ value: "ollama", label: "Ollama" }, { value: "openai", label: "OpenAI兼容" }] },
-			{ key: "baseUrl", label: "接口地址", type: "text" },
+			{ key: "baseUrl", label: "接口地址", desc: "含协议与端口，例如 http://127.0.0.1:11434；结尾不要加 /", type: "text", normalize: "url" },
 			{ key: "modelName", label: "模型名称", type: "text" },
 			{ key: "apiKey", label: "API Key", type: "text" },
 			{ key: "temperature", label: "Temperature", desc: "控制输出随机性，0-2，越低越确定", type: "number", min: "0", max: "2", step: "0.1" },
@@ -141,6 +143,13 @@ export function parseSettingValue(item: SettingItem, raw: string): string | numb
  * 温度可以存成 50，之后才在别处被静默截断。这里保证落盘的永远是合法值。
  */
 export function clampSettingValue(item: SettingItem, value: unknown): unknown {
+	// 接口地址：去首尾空白与末尾多余的 `/`。`llmService` 是直接字符串拼接路径，
+	// 留着尾斜杠会拼出 `http://x/v1//v1/chat/completions`。
+	// 只做能确定安全的归一化，不擅自补协议（可能是 https 或内网域名）。
+	if (item.normalize === "url") {
+		const s = typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
+		return s.trim().replace(/\/+$/, "");
+	}
 	if (item.type !== "number" && item.type !== "easePreset") return value;
 	const num = typeof value === "number" ? value : Number(value);
 	if (!isFinite(num)) return value;

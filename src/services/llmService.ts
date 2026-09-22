@@ -19,6 +19,22 @@ export interface ChatLLMOptions {
 	images?: string[];
 }
 
+/**
+ * 拼接接口地址。
+ *
+ * `baseUrl` 是自由文本输入，用户可能写成 `http://x/v1/`（尾部带斜杠）或前后带空格，
+ * 直接字符串相加会拼出 `http://x/v1//v1/chat/completions` 这种畸形 URL。
+ * 统一在这里归一化，老版本已存进 data.json 的地址也能自动修正。
+ */
+export function joinApiUrl(baseUrl: string, path: string): string {
+	const base = (baseUrl || "").trim().replace(/\/+$/, "");
+	const suffix = path.startsWith("/") ? path : "/" + path;
+	// base 已经带了 /v1、而路径也以 /v1/ 开头时去重：
+	// 用户填 `http://x/v1`（OpenAI 兼容接口最常见的写法）不该拼成 `/v1/v1/chat/completions`。
+	if (/\/v1$/.test(base) && suffix.startsWith("/v1/")) return base + suffix.slice(3);
+	return base + suffix;
+}
+
 export interface OllamaChatMessage {
 	role: "system" | "user" | "assistant";
 	content: string;
@@ -31,7 +47,7 @@ interface OllamaChatResponse {
 export async function chatLLM(cfg: PluginSettings, prompt: string, opts?: ChatLLMOptions): Promise<string> {
 	const images = opts?.images || [];
 	if (cfg.apiType === "ollama") {
-		const url = cfg.baseUrl + "/api/generate";
+		const url = joinApiUrl(cfg.baseUrl, "/api/generate");
 		const body: Record<string, unknown> = { model: cfg.modelName, prompt, stream: false, temperature: cfg.temperature };
 		if (images.length > 0) body.images = images;
 		const data = await postJson({
@@ -42,7 +58,7 @@ export async function chatLLM(cfg: PluginSettings, prompt: string, opts?: ChatLL
 		}) as OllamaResponse;
 		return data.response || "";
 	}
-	const url = cfg.baseUrl + "/v1/chat/completions";
+	const url = joinApiUrl(cfg.baseUrl, "/v1/chat/completions");
 	const messages: unknown[] = [];
 	if (opts?.system) messages.push({ role: "system", content: opts.system });
 	if (images.length > 0) {
@@ -82,7 +98,7 @@ export async function chatMessage(
 ): Promise<string> {
 	const history = messages.map(m => ({ role: m.role, content: m.content }));
 	if (cfg.apiType === "ollama") {
-		const url = cfg.baseUrl + "/api/chat";
+		const url = joinApiUrl(cfg.baseUrl, "/api/chat");
 		const msgs: OllamaChatMessage[] = [];
 		if (opts?.system) msgs.push({ role: "system", content: opts.system });
 		msgs.push(...(history as OllamaChatMessage[]));
@@ -98,7 +114,7 @@ export async function chatMessage(
 	if (opts?.system) messagesArr.push({ role: "system", content: opts.system });
 	messagesArr.push(...history);
 	const data = await postJson({
-		url: cfg.baseUrl + "/v1/chat/completions",
+		url: joinApiUrl(cfg.baseUrl, "/v1/chat/completions"),
 		method: "POST",
 		contentType: "application/json",
 		headers: { "Authorization": "Bearer " + cfg.apiKey },

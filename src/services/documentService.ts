@@ -1,14 +1,71 @@
 import * as fs from "fs";
 import * as path from "path";
 
+/** 严格 UTF-8 解码器：解不开会抛错，用来判断一段字节「是不是」UTF-8。 */
+const UTF8_STRICT = new TextDecoder("utf-8", { fatal: true });
+/** 逐字节映射，任何字节序列都能解出来（最后兜底，保证不丢数据）。 */
+const LATIN1 = new TextDecoder("latin1");
+
+/** 代码页 → 解码器缓存（TextDecoder 无状态，可安全复用）。 */
+const decoderCache = new Map<number, TextDecoder | null>();
+
+/**
+ * 取某个 ANSI 代码页的解码器；运行时不支持该编码时返回 null。
+ *
+ * 只映射中文/日韩场景真正会用到的几个页，其余（含未知值）交给调用方的启发式。
+ */
+function decoderForCodepage(cp: number): TextDecoder | null {
+	if (!cp) return null;
+	const cached = decoderCache.get(cp);
+	if (cached !== undefined) return cached;
+	let dec: TextDecoder | null = null;
+	try {
+		if (cp === 936) dec = new TextDecoder("gbk", { fatal: false });
+		else if (cp === 950) dec = new TextDecoder("big5", { fatal: false });
+		else if (cp === 932) dec = new TextDecoder("shift_jis", { fatal: false });
+		else if (cp === 949) dec = new TextDecoder("euc-kr", { fatal: false });
+		else if (cp >= 1250 && cp <= 1258) dec = new TextDecoder("windows-" + cp, { fatal: false });
+	} catch { dec = null; }
+	decoderCache.set(cp, dec);
+	return dec;
+}
+
+/** CJK 代码页：字节序列几乎不可能同时是合法 UTF-8，可以直接按声明解码。 */
+function isCjkCodepage(cp: number): boolean {
+	return cp === 936 || cp === 950 || cp === 932 || cp === 949;
+}
+
+/**
+ * 按「先看 BOM，再严格试 UTF-8，最后按代码页 / latin1 兜底」的顺序解码文本文件。
+ *
+ * 中文 Windows 上的 txt 大多是 GBK，旧实现硬用 `readFileSync(path, "utf-8")` 会整篇乱码；
+ * 同时这里也顺手剥掉 BOM，避免 `\uFEFF` 被当成正文送进提示词。
+ */
+export function decodeTextBytes(buf: Uint8Array): string {
+	// UTF-8 BOM
+	if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+		return UTF8_STRICT.decode(buf.subarray(3));
+	}
+	// UTF-16 BOM（大小端）
+	if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return new TextDecoder("utf-16le", { fatal: false }).decode(buf.subarray(2));
+	if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return new TextDecoder("utf-16be", { fatal: false }).decode(buf.subarray(2));
+	// 无 BOM：先严格试 UTF-8，失败说明大概率是本地编码（中文场景多为 GBK）
+	try { return UTF8_STRICT.decode(buf); } catch { /* 不是 UTF-8 */ }
+	try { return new TextDecoder("gbk", { fatal: false }).decode(buf); } catch { return LATIN1.decode(buf); }
+}
+
+/** 读文本文件并按 BOM / 编码自动解码（vault 外的绝对路径）。 */
+function readTextFileAuto(filePath: string): string {
+	return decodeTextBytes(new Uint8Array(fs.readFileSync(filePath)));
+}
+
 export async function convertDocumentToText(filePath: string): Promise<string> {
 	const ext = path.extname(filePath).slice(1).toLowerCase();
 	switch (ext) {
 		case "txt":
-			return fs.readFileSync(filePath, "utf-8");
+			return readTextFileAuto(filePath);
 		case "rtf": {
-			const raw = fs.readFileSync(filePath, "utf-8");
-			return stripRtf(raw);
+			return stripRtf(readTextFileAuto(filePath));
 		}
 		case "docx": {
 			const mammoth = await import("mammoth");
@@ -56,13 +113,29 @@ export function stripRtf(raw: string): string {
 	const out: string[] = [];
 	let bytes: number[] = [];
 	const n = raw.length;
+	/** 文档声明的 ANSI 代码页（`\ansicpg<N>`）；0 表示未知。 */
+	let ansicpg = 0;
 
+	/**
+	 * 输出累积的 `\'hh` 字节。
+	 *
+	 * RTF 的十六进制字节是按 `\ansicpg` 声明的代码页编码的——中文 RTF 常见 936（GBK）。
+	 * 旧实现只试 UTF-8、失败就退 latin1，于是 `\'c4\'e3` 会变成 `Äã`（整篇中文乱码）。
+	 */
 	const flushBytes = () => {
 		if (bytes.length === 0) return;
 		const buf = Uint8Array.from(bytes);
 		bytes = [];
-		const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(buf);
-		out.push(utf8.includes("\uFFFD") ? new TextDecoder("latin1").decode(buf) : utf8);
+		// 1) 声明的代码页是 CJK 时直接按它解：这些页的字节几乎不可能是合法 UTF-8
+		if (isCjkCodepage(ansicpg)) {
+			const cjk = decoderForCodepage(ansicpg);
+			if (cjk) { out.push(cjk.decode(buf)); return; }
+		}
+		// 2) 先严格试 UTF-8，顺带覆盖「字节其实是 UTF-8、但 ansicpg 写错」的畸形文件
+		try { out.push(UTF8_STRICT.decode(buf)); return; } catch { /* 不是 UTF-8 */ }
+		// 3) 退回声明的代码页；未知则 latin1 逐字节映射（永不丢数据）
+		const declared = decoderForCodepage(ansicpg);
+		out.push(declared ? declared.decode(buf) : LATIN1.decode(buf));
 	};
 
 	const skipGroup = (from: number): number => {
@@ -101,6 +174,8 @@ export function stripRtf(raw: string): string {
 				while (j < n && /[0-9]/.test(raw[j]!)) { param += raw[j]; j++; }
 			}
 			if (raw[j] === " ") j++;
+			// 记录声明的代码页，供 flushBytes 正确解码后面的 `\'hh` 字节
+			if (word === "ansicpg" && param) { const cp = parseInt(param, 10); ansicpg = cp > 0 ? cp : 0; i = j; continue; }
 			if (word === "u" && param) {
 				flushBytes();
 				let code = parseInt(param, 10);

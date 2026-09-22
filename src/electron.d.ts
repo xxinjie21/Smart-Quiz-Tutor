@@ -44,13 +44,21 @@ declare module "electron" {
     trashItem(fullPath: string): Promise<void>;
   }
 
-  export const remote: {
+  /**
+   * 渲染进程的 remote 能力。
+   *
+   * 不同 Obsidian / Electron 版本对 `@electron/remote` 的暴露方式不一致，可能整体缺失，
+   * 因此这里标注为可空——调用方必须走 `getElectronRemote()`，由它统一兜底报错。
+   */
+  interface ElectronRemote {
     BrowserWindow: typeof BrowserWindow;
     dialog: {
       showSaveDialog(options: SaveDialogOptions): Promise<SaveDialogReturn>;
     };
     shell?: Shell;
-  };
+  }
+
+  export const remote: ElectronRemote | undefined;
 
   export const shell: Shell | undefined;
 }

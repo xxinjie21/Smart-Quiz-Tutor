@@ -36,6 +36,13 @@ export type QuestionType = "single" | "multi" | "judge" | "blank" | "essay";
 export interface ChatMessage {
 	role: "user" | "assistant";
 	content: string;
+	/**
+	 * 该条是「上下文压缩」生成的摘要，用于替换它之前的一批消息。
+	 *
+	 * 摘要不当作一轮真实对话发给模型，而是并入 system 提示词（见 `collectSummaries`）；
+	 * 同时在界面上以独立卡片渲染，便于用户看出哪些内容被折叠了。
+	 */
+	summary?: boolean;
 }
 
 export type ChatSearchScope = "plugin" | "vault";

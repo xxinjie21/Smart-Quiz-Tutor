@@ -159,7 +159,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}
 	}
 
-	async activateSidebar(): Promise<MainSidebarView | null> {		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
+	async activateSidebar(): Promise<MainSidebarView | null> {
+		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 		if (leaves.length > 0) {
 			await this.app.workspace.revealLeaf(leaves[0]!);
 			return leaves[0]!.view as MainSidebarView;
@@ -202,15 +203,7 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		this.addSettingTab(new QuestionGeneratorSettingTab(this.app, this));
 
 		this.addRibbonIcon("pencil", t("智学助手"), async () => {
-			const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
-			if (leaves.length > 0) {
-				await this.app.workspace.revealLeaf(leaves[0]!);
-			} else {
-				const leaf = this.app.workspace.getRightLeaf(false);
-				if (leaf) {
-					await leaf.setViewState({ type: SIDEBAR_VIEW_TYPE, active: true });
-				}
-			}
+			await this.activateSidebar();
 		});
 
 		this.app.workspace.onLayoutReady(async () => {
@@ -233,7 +226,9 @@ export default class QuestionGeneratorPlugin extends Plugin {
 					const notes = await this.loadAllWrongNotes();
 					const dueCount = notes.filter(n => isDueForReview(n)).length;
 					if (dueCount > 0) {
-						this.registerInterval(window.setTimeout(() => {
+						// 这是一次性定时器：用 register(clearTimeout) 而不是 registerInterval。
+						// 两者的 id 空间恰好共用、清得掉，但语义对不上，后人容易误读成「每分钟提醒一次」。
+						const timer = window.setTimeout(() => {
 							const notice = new Notice(tf("你有 {n} 道错题待复习，点击开始", { n: dueCount }), NOTICE_DURATION_MS);
 							notice.messageEl.addEventListener("click", () => {
 								void (async () => {
@@ -241,7 +236,8 @@ export default class QuestionGeneratorPlugin extends Plugin {
 									if (view) { view.activeSection = "wrong"; view.wrongView = "list"; await view.render(); }
 								})();
 							});
-						}, REVIEW_REMINDER_DELAY_MS));
+						}, REVIEW_REMINDER_DELAY_MS);
+						this.register(() => window.clearTimeout(timer));
 					}
 				} catch { /* empty */ }
 			}
@@ -355,6 +351,9 @@ export default class QuestionGeneratorPlugin extends Plugin {
 		}));
 	}
 	onunload() {
+		// 视图的 onClose 会自行 offDataChanged；这里兜住「leaf 被直接销毁、没走 onClose」的情况，
+		// 否则残留的回调会在插件卸载后仍被 emitDataChanged 触发。
+		this._refreshCallbacks = [];
 		const leaves = this.app.workspace.getLeavesOfType(SIDEBAR_VIEW_TYPE);
 		for (const leaf of leaves) { leaf.detach(); }
 	}
@@ -369,21 +368,21 @@ export { safeName, cleanSourceText, estimateTokens, stripAnswersForExport, extra
 export { todayStr, isDueForReview } from "./utils/review";
 export { sm2Update, clampEase, DEFAULT_EASE_FACTOR, MIN_EASE_FACTOR, QUALITY } from "./utils/sm2";
 export { localDateStr, addDaysStr } from "./utils/date";
-export { loadSessions, listSessionIds, loadSession, saveSession, createSession, deleteSession, renameSession, setSessionScope, setActiveSession, loadMeta, saveMeta, autoTitle, genId, capMessages, type ChatAdapter } from "./utils/chatStorage";
+export { loadSessions, listSessionIds, loadSession, saveSession, createSession, deleteSession, renameSession, setSessionScope, setActiveSession, loadMeta, saveMeta, autoTitle, genId, capMessages, planCompression, collectSummaries, buildRequestMessages, type ChatAdapter, type CompressionPlan } from "./utils/chatStorage";
 export { stripMd, parseQuestions } from "./utils/parse";
 export { extractKnowledgeTags } from "./utils/tags";
 export { debounce } from "./utils/debounce";
 export { buildFileTree } from "./utils/filetree";
 export { stripAnswerSummarySection, splitSemantic, normalizeAnswerSteps, splitAnswerContent, fixSequentialNumbers, normalizeExamContent, highlightTechTerms, highlightTechHtml } from "./utils/layout";
 export { buildWordParagraphs, buildExportHtml, parseExamBlocks, exportPdfDirect } from "./utils/exporter";
-export { getElectronRemote } from "./utils/electron";
-export { chatLLM, chatMessage } from "./services/llmService";
-export { getScopeFiles, retrieveContext, buildChatPrompt, tokenize, rankCandidates, buildReferenceBlock } from "./services/chatService";
+export { getElectronRemote, getElectronShell, hasElectronRemote } from "./utils/electron";
+export { chatLLM, chatMessage, joinApiUrl } from "./services/llmService";
+export { getScopeFiles, retrieveContext, buildChatPrompt, buildCompressPrompt, tokenize, rankCandidates, buildReferenceBlock } from "./services/chatService";
 export { pruneHistory } from "./utils/history";
 export { buildExamExtractPrompt, buildGeneratePrompt, parseTypeSpec, parseAITagsFromResult, mergeExamChunks } from "./services/questionService";
 export { KnowledgeService, buildTaggingPrompt, parseTaggedResult } from "./services/knowledgeService";
 export { VaultDataService } from "./services/vaultDataService";
-export { convertDocumentToText, stripRtf, htmlToMarkdown } from "./services/documentService";
+export { convertDocumentToText, stripRtf, htmlToMarkdown, decodeTextBytes } from "./services/documentService";
 export type { OllamaResponse, OpenAIResponse, FmValue, HistoryEntry, WrongAnswerNote, QuestionType, ParsedQuestion, PluginSettings, TreeNode, SectionKey, HomeViewKey, SortMode, ReviewFilterType, ReviewSource, ChatMessage, ChatSearchScope } from "./types";
 export { MainSidebarView } from "./views/sidebarView";
 export { QuestionGeneratorSettingTab } from "./views/settingTab";
