@@ -209,46 +209,6 @@ The sidebar has **7 tabs**:
 
 ---
 
-## Changelog
-
-### v2.3.0
-- **Real SM-2 spaced repetition**: per-item ease factor (EF) and repetition tracking; review with four grades (**Forgot / Hard / Good / Easy**). Each module has a single **interval factor** setting (default wrong 2.3 / question 2.5 / note 2.5, recommended 2.0–2.8) with Fewer reviews / Standard / More reviews one-click presets; intervals grow as 1 day → 6 days → previous × factor.
-- **Manual wrong-answer entry**: add a wrong answer by hand (content / source / knowledge tags / note) from the **错题** tab.
-- **Answer-only export**: export a questions file (or a wrong answer) containing only the answers and explanations.
-- **Chat workspaces**: the AI chat now supports **workspaces** and multiple independent **conversations** per workspace; each conversation remembers its own retrieval scope (old single history migrates automatically).
-- **Local-date fix**: review scheduling now uses your local timezone instead of UTC (no more off-by-one due dates).
-- **Settings single source of truth**: the native settings tab and the in-sidebar settings are both rendered from one schema, so they can no longer drift apart.
-- **Cleanup**: removed two unused dependencies; the hardcoded global `Ctrl+Q` listener is replaced by a normal command (bind your own hotkey).
-- 307 tests pass; `tsc` 0 errors; ESLint 0 errors / 0 warnings.
-
-### v2.2.0
-- **Built-in AI chat** in the Smart Question Tutor sidebar (**AI** tab): retrieval over your notes, **multi-file references** (from the active note/selection or a file picker), a configurable **reference budget**, Markdown-rendered replies, copy / regenerate, and "stick-to-bottom" scrolling.
-- **Robust retrieval**: CJK-aware tokenization (2/3-gram), filename/path weighting, and two-stage candidate ranking (only matched files are read).
-- **Chat polish**: inline error/warning bubbles, token-size warning, `Ctrl/⌘+Enter` to send, auto-focus on open.
-- **Reliability**: idempotent folder creation (no "Folder already exists" on startup), friendly network-error messages, history pruning (kept ≤ 100 entries, results truncated), TTL caches for question/note/wrong lists.
-- **Maintainability**: `sidebarView.ts` split from ~3700 lines into 13 focused modules under `src/views/sidebar/`; data/list/export logic moved to `VaultDataService`; all brittle `[style*=]` CSS selectors replaced with semantic classes.
-- Rebuilt `main.js`; CI now runs build + unit tests; a guard test asserts no `eval` / no script injection.
-- 194 tests pass; `tsc` 0 errors; ESLint 0 errors.
-
-### v2.1.0
-- **One-click Chinese/English language switch** — ~500 UI strings across all tabs now go through a zh/en dictionary; switch instantly from Settings (or the in-sidebar settings).
-- **Bilingual AI prompts** — question generation, exam extraction, note generation and tag suggestion support both languages, keeping the "language follows the material" rule.
-- **English parsing & export support** — the question parser and exporter now recognize `Answer:` / `Explanation:` / `Answer Summary` etc., so English-material questions parse and export correctly.
-- **Dictionary fallback** — missing translations show the original text, so the UI never goes blank.
-- Made the dynamic-script strip regex minifier-agnostic, keeping `createElement("script")` at **0** for the Obsidian review lint.
-- 153 tests pass (new: dictionary integrity, placeholder replacement, bilingual prompts, English parsing); `tsc` 0 errors, ESLint 0 errors.
-
-### v2.0.1
-- Removed the remaining dynamic `<script>` injection (from the `setimmediate` dependency) that Obsidian's review lint flagged as an error — `createElement("script")` went from 3 to **0**, unblocking community review.
-
-### v2.0.0
-- **Knowledge-index rebuild is now resilient** — a single failed tag write no longer aborts the whole rebuild; stale index files are cleaned up in one pass.
-- **Review progress persists across sessions** — interval / correct-count are stored as numbers, so your spaced-repetition streak is no longer reset on reload.
-- **Responsive heatmap** — uses a scrollbar, auto-positions to today, and stays pinned to today as you resize the sidebar.
-- Added comprehensive test suites (knowledge index, document service, note service, fixes).
-
----
-
 ## Support
 
 If this plugin helps your studies, consider giving it a star on GitHub!
@@ -458,46 +418,6 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 | [esbuild](https://esbuild.github.io) | 构建工具 |
 | [docx](https://docx.js.org) | Word 文档生成 |
 | SM-2 | 间隔重复算法 |
-
----
-
-## 更新日志
-
-### v2.3.0
-- **真 SM-2 间隔重复**：每条记录独立维护难度因子（EF）与重复次数；复习采用四档评分（**忘记 / 困难 / 一般 / 简单**）。每个模块只填一个**间隔因子**（默认 错题 2.3 / 题目 2.5 / 笔记 2.5，推荐 2.0–2.8），并提供 少复习 / 标准 / 多复习 一键预设；间隔按 1 天 → 6 天 → 上一间隔 × 因子 递增。
-- **手动添加错题**：在 **错题** 页手动录入（内容 / 来源 / 知识点标签 / 备注）。
-- **仅答案导出**：可导出只含答案与解析的试题文件（错题详情同样支持）。
-- **聊天工作区**：AI 对话支持**工作区**，每个工作区内可有多个独立**会话**；每个会话单独记忆检索范围（旧版单一历史自动迁移）。
-- **本地日期修复**：复习排期改用本地时区，不再出现 UTC 导致的差一天。
-- **设置单一来源**：原生设置页与侧边栏设置页由同一 schema 渲染，不再各自分叉。
-- **清理**：移除两个未使用依赖；移除硬编码的全局 `Ctrl+Q` 监听，改为普通命令（快捷键自行绑定）。
-- 307 项测试通过；`tsc` 0 错误；ESLint 0 错误 / 0 警告。
-
-### v2.2.0
-- **内置 AI 对话**：藏在**智学助手**侧边栏的 **AI** 页签——基于笔记检索回答，支持**多文件引用**（当前笔记/选区或从文件选择器挑选）、可配置**引用预算**、Markdown 渲染、复制/重新生成、贴底滚动。
-- **检索更稳**：中文 2/3-gram 分词、文件名/路径加权、两段式候选排序（只读取命中的文件）。
-- **对话体验**：就地错误/警告气泡、超长提示、`Ctrl/⌘+Enter` 发送、打开即聚焦。
-- **可靠性**：文件夹创建幂等（不再启动报 “Folder already exists”）、网络错误友好提示、历史记录裁剪（≤100 条，结果截断）、题目/笔记/错题列表短时缓存。
-- **可维护性**：`sidebarView.ts` 由约 3700 行拆分为 `src/views/sidebar/` 下 13 个模块；数据/列表/导出逻辑下沉到 `VaultDataService`；脆弱的 `[style*=]` CSS 选择器全部替换为语义 class。
-- 重建 `main.js`；CI 增加构建 + 单元测试；新增护栏测试确保无 `eval` / 无脚本注入。
-- 194 项测试通过；`tsc` 0 错误、ESLint 0 errors。
-
-### v2.1.0
-- **一键中英文切换** — 全部 Tab 约 500 条 UI 文案接入中英文字典，在设置页（或侧边栏设置内）一键切换、即时生效。
-- **AI 提示词双语化** — 出题、识别试卷、生成笔记、添加标签的提示词支持中英文，保留「语言与材料一致」规则。
-- **英文解析与导出兼容** — 题目解析器与导出器识别 `Answer:` / `Explanation:` / `Answer Summary` 等英文标签，英文材料出的题可正常解析与导出。
-- **字典回退机制** — 漏翻文案自动显示原文，界面永不空白。
-- 动态脚本剥离正则改为与 minifier 变量名无关，`createElement("script")` 始终保持 **0 处**，满足 Obsidian 审核 lint。
-- 153 项测试全部通过（新增：字典完整性、占位符替换、提示词双语、英文解析）；`tsc` 0 错误、ESLint 0 errors。
-
-### v2.0.1
-- 清除 `setimmediate` 依赖残留的动态 `<script>` 注入（Obsidian 审核 lint 报错的靶点），`createElement("script")` 由 3 处降为 **0 处**，解除社区审核阻塞。
-
-### v2.0.0
-- **知识点索引重建更可靠** — 单个标签写入失败不再中断整个重建；过期索引一次性全部清理。
-- **复习进度跨会话持久化** — 间隔 / 答对次数以数字存储，间隔重复连续记录不再因重载被重置。
-- **热力图响应式** — 使用滑动条、自动定位当天，并在调整侧边栏时始终钉在当天。
-- 新增系统化测试套件（知识点索引、文档服务、笔记服务、修复验证）。
 
 ---
 
