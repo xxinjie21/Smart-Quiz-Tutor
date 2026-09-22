@@ -26,7 +26,8 @@ jobs:
 
             - name: Create release
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  # 优先使用 RELEASE_TOKEN（作者=你）；未配置时回退 GITHUB_TOKEN（作者=github-actions[bot]）
+                  GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
               run: |
                   tag="${GITHUB_REF#refs/tags/}"
                   gh release create "$tag" \
