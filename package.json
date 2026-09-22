@@ -12,7 +12,7 @@
 		"test": "vitest run"
 	},
 	"keywords": [],
-	"license": "ISC",
+	"license": "0BSD",
 	"devDependencies": {
 		"@eslint/js": "^9.39.4",
 		"@types/node": "^22.15.17",

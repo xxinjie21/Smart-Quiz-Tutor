@@ -221,7 +221,7 @@ For issues and feature requests, please [open an issue](https://github.com/xxinj
 
 ## License
 
-[ISC License](LICENSE)
+[0BSD License](LICENSE)
 
 </details>
 
@@ -433,6 +433,6 @@ your-vault/.obsidian/plugins/smart-quiz-tutor/
 
 ## 许可
 
-[ISC License](LICENSE)
+[0BSD License](LICENSE)
 
 </details>
